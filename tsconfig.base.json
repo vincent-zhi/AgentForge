@@ -1,0 +1,31 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "baseUrl": ".",
+    "paths": {
+      "@agentforge/core": [
+        "packages/core/src/index.ts"
+      ],
+      "@agentforge/runtime": [
+        "packages/runtime/src/index.ts"
+      ],
+      "@agentforge/tools": [
+        "packages/tools/src/index.ts"
+      ],
+      "@agentforge/ui": [
+        "packages/ui/src/index.ts"
+      ]
+    },
+    "ignoreDeprecations": "6.0"
+  }
+}

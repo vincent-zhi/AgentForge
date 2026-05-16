@@ -1,0 +1,19 @@
+{
+  "name": "@agentforge/desktop",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "dist/main.js",
+  "types": "dist/main.d.ts",
+  "dependencies": {
+    "@agentforge/core": "workspace:*",
+    "@agentforge/runtime": "workspace:*",
+    "@agentforge/tools": "workspace:*",
+    "@agentforge/ui": "workspace:*"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "dev": "node dist/main.js",
+    "start": "node dist/main.js",
+    "typecheck": "tsc -b --pretty false"
+  }
+}
