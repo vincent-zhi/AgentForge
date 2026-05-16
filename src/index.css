@@ -1,0 +1,121 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+
+  html,
+  body {
+    height: 100%;
+    overflow: hidden;
+    background-color: #0B0D10;
+    color: #F2F4F6;
+    font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  #root {
+    height: 100%;
+  }
+
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: #1A1D22;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: #6F7782;
+    border-radius: 3px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: #A7AFBA;
+  }
+
+  ::selection {
+    background-color: #FF7A1A40;
+    color: #F2F4F6;
+  }
+
+  code, pre {
+    font-family: "JetBrains Mono", "Fira Code", "Cascadia Code", monospace;
+  }
+}
+
+@layer components {
+  .panel {
+    @apply bg-graphite border border-forged-steel/20 rounded-md;
+  }
+
+  .panel-header {
+    @apply px-4 py-2 border-b border-forged-steel/20 text-bright-steel font-medium text-sm flex items-center justify-between;
+  }
+
+  .panel-body {
+    @apply p-4 overflow-auto;
+  }
+
+  .badge {
+    @apply inline-flex items-center px-2 py-0.5 rounded-sm text-xs font-medium;
+  }
+
+  .badge-verified {
+    @apply badge bg-safe-green/20 text-safe-green;
+  }
+
+  .badge-partial {
+    @apply badge bg-warning-amber/20 text-warning-amber;
+  }
+
+  .badge-blocked {
+    @apply badge bg-risk-red/20 text-risk-red;
+  }
+
+  .badge-analyzing {
+    @apply badge bg-blue-500/20 text-blue-400;
+  }
+
+  .badge-brain {
+    @apply badge bg-purple-500/20 text-purple-400;
+  }
+
+  .badge-unverified {
+    @apply badge bg-forged-steel/20 text-forged-steel;
+  }
+
+  .badge-ember {
+    @apply badge bg-ember-orange/20 text-ember-orange;
+  }
+
+  .chip {
+    @apply inline-flex items-center gap-1 px-2 py-1 rounded-sm text-xs bg-graphite border border-forged-steel/30 text-text-gray;
+  }
+
+  .input-field {
+    @apply w-full bg-forge-black border border-forged-steel/30 rounded-md px-3 py-2 text-bright-steel placeholder:text-forged-steel focus:outline-none focus:border-ember-orange/50 focus:ring-1 focus:ring-ember-orange/30;
+  }
+
+  .btn-primary {
+    @apply px-4 py-2 bg-ember-orange text-forge-black font-semibold rounded-md hover:bg-deep-ember transition-colors duration-normal disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .btn-secondary {
+    @apply px-4 py-2 bg-graphite border border-forged-steel/30 text-bright-steel rounded-md hover:border-ember-orange/50 transition-colors duration-normal;
+  }
+
+  .btn-ghost {
+    @apply px-4 py-2 text-text-gray hover:text-bright-steel hover:bg-graphite rounded-md transition-colors duration-normal;
+  }
+}
