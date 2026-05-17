@@ -9,6 +9,7 @@ import { FileWatcher } from './file-watcher';
 import { EVENT_CHANNELS } from '@/ipc/event-channels';
 import { getDatabase } from '../../db/connection';
 import type { PluginRegistry } from '../plugin/plugin-registry';
+import { FactGovernor } from '../memory-governance/fact-governor';
 import { LRUCache } from '../cache/lru-cache';
 
 const SCAN_RESULT_TABLE = 'project_scan_results';
@@ -23,9 +24,12 @@ export class BrainService {
   private moduleListCache: LRUCache<string, ModuleInfo[]> = new LRUCache(20, 5 * 60 * 1000);
   private factQueryCache: LRUCache<string, ProjectFact[]> = new LRUCache(50, 2 * 60 * 1000);
   private pluginRegistry: PluginRegistry | null = null;
+  private factGovernor: FactGovernor;
+  onFactChange?: (data: { action: string; factId?: string; factType?: string; details?: Record<string, unknown>; timestamp: string }) => void;
 
-  constructor(factRepo?: ProjectFactRepository) {
+  constructor(factRepo?: ProjectFactRepository, factGovernor?: FactGovernor) {
     this.factRepo = factRepo || new ProjectFactRepository();
+    this.factGovernor = factGovernor || new FactGovernor();
     this.ensureScanResultTable();
   }
 
@@ -290,15 +294,28 @@ export class BrainService {
       updatedAt: now,
     };
     this.factRepo.insert(newFact);
+    if (this.onFactChange) {
+      this.onFactChange({ action: 'add_fact', factId: newFact.id, factType: newFact.type, details: { statement: newFact.statement }, timestamp: now });
+    }
     return newFact;
   }
 
   updateFactStatus(id: string, status: FactStatus): void {
     this.factRepo.updateStatus(id, status);
+    if (this.onFactChange) {
+      this.onFactChange({ action: 'update_fact_status', factId: id, details: { status }, timestamp: new Date().toISOString() });
+    }
   }
 
   markStaleFacts(filePath: string): void {
     this.factRepo.markStaleByFile(filePath);
+    if (this.onFactChange) {
+      this.onFactChange({ action: 'mark_facts_stale', details: { filePath }, timestamp: new Date().toISOString() });
+    }
+  }
+
+  revertTaskUpdates(taskId: string): number {
+    return this.factGovernor.revertByTaskId(taskId);
   }
 
   getScanResult(): ProjectScanResult | null {

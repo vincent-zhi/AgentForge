@@ -117,6 +117,9 @@ export const IPC_CHANNELS = {
     APPLY_PROPOSAL: 'memory:applyProposal',
     REJECT_PROPOSAL: 'memory:rejectProposal',
   },
+  BRAIN: {
+    REVERT_TASK: 'brain:revert-task',
+  },
   UPDATER: {
     CHECK: 'updater:check',
     INSTALL: 'updater:install',
@@ -126,6 +129,18 @@ export const IPC_CHANNELS = {
     EXECUTE: 'sandbox:execute',
     STOP: 'sandbox:stop',
     STATUS: 'sandbox:status',
+  },
+  FEATURE: {
+    CHECK: 'feature:check',
+    TIER_GET: 'feature:tier:get',
+    TIER_SET: 'feature:tier:set',
+  },
+  LEASE: {
+    ESCALATION_REQUEST: 'lease:escalation:request',
+    ESCALATION_RESPOND: 'lease:escalation:respond',
+  },
+  AUDIT: {
+    QUERY: 'audit:query',
   },
 } as const;
 

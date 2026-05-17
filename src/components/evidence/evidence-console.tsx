@@ -57,6 +57,11 @@ const EvidenceConsole: React.FC = React.memo(() => {
     [evidenceStack]
   );
 
+  const ciEntries = useMemo(
+    () => evidenceStack.filter((e) => e.type === 'ci'),
+    [evidenceStack]
+  );
+
   return (
     <div className="flex flex-col h-full">
       <div className="flex shrink-0 border-b border-forged-steel/20">
@@ -123,7 +128,29 @@ const EvidenceConsole: React.FC = React.memo(() => {
 
         {activeTab === 'ci' && (
           <div className="space-y-2">
-            {ciWorkflows.length === 0 ? (
+            {ciEntries.length > 0 && (
+              <div className="space-y-1 mb-3">
+                <div className="text-[10px] text-forged-steel uppercase tracking-wider mb-1">CI Evidence</div>
+                {ciEntries.map((e: EvidenceEntry) => (
+                  <div key={e.id} className="px-2 py-1.5 rounded-sm bg-forge-black/50">
+                    <div className="flex items-center gap-1.5">
+                      <Badge
+                        variant={e.result === 'success' ? 'verified' : e.result === 'failure' ? 'partial' : 'default'}
+                        label={e.result ?? 'unknown'}
+                      />
+                      <span className="text-sm text-bright-steel">{e.content}</span>
+                    </div>
+                    {e.metadata && (
+                      <div className="text-[10px] text-forged-steel mt-1 font-mono">
+                        {`duration: ${String((e.metadata as Record<string, unknown>).duration)}ms | ${String((e.metadata as Record<string, unknown>).logSummary)}`}
+                      </div>
+                    )}
+                    <div className="text-[10px] text-forged-steel mt-0.5">{e.timestamp}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+            {ciWorkflows.length === 0 && ciEntries.length === 0 ? (
               <div className="text-xs text-forged-steel text-center py-4">
                 No CI configurations detected.
               </div>

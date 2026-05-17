@@ -6,6 +6,17 @@ import { recommendTests } from './test-recommender';
 import type { ProjectPolicy } from '../security/policy-manager';
 import { LRUCache } from '../cache/lru-cache';
 
+export type ImpactStrategy = 'quick' | 'deep';
+
+export type ImpactComparisonResult = {
+  match: boolean;
+  newUpstream: ModuleRef[];
+  newDownstream: ModuleRef[];
+  newContractsTouched: ContractRef[];
+  newAffectedTests: TestCommand[];
+  outOfScopeFiles: string[];
+};
+
 export class GuardEngine {
   private impactMapRepo: ImpactMapRepository;
   private dependencyGraph: Map<string, string[]> = new Map();
@@ -40,8 +51,8 @@ export class GuardEngine {
     this.testMapping = mapping;
   }
 
-  analyzeImpact(taskId: string, target: ChangeTarget): ImpactMap {
-    const cacheKey = `${taskId}:${target.module}:${target.files.sort().join(',')}`;
+  analyzeImpact(taskId: string, target: ChangeTarget, strategy: ImpactStrategy = 'deep'): ImpactMap {
+    const cacheKey = `${taskId}:${target.module}:${target.files.sort().join(',')}:${strategy}`;
     const cached = this.impactCache.get(cacheKey);
     if (cached) {
       return cached;
@@ -53,6 +64,34 @@ export class GuardEngine {
       this.dependencyGraph,
       this.contracts
     );
+
+    if (strategy === 'quick') {
+      const forbiddenChanges: string[] = [];
+      for (const contract of contractsTouched) {
+        if (contract.compatibility === 'must_preserve') {
+          forbiddenChanges.push(`Contract "${contract.name}" must be preserved`);
+        }
+      }
+
+      const impactMap: ImpactMap = {
+        taskId,
+        target,
+        upstreamDependencies: upstream,
+        downstreamDependents: downstream,
+        contractsTouched,
+        affectedTests: [],
+        forbiddenChanges,
+        risk: { level: 'low', reasons: [] },
+        reviewFocus: [],
+        plannedImpactHash: this.computeHash(target, downstream, contractsTouched),
+      };
+
+      this.impactMaps.set(taskId, impactMap);
+      this.impactMapRepo.insert(impactMap);
+      this.impactCache.set(cacheKey, impactMap);
+
+      return impactMap;
+    }
 
     const risk = assessRisk(target, downstream, contractsTouched, this.riskMarkers);
     const affectedModules = [...upstream, ...downstream];
@@ -122,6 +161,42 @@ export class GuardEngine {
 
   getImpactMap(taskId: string): ImpactMap | null {
     return this.impactMaps.get(taskId) || this.impactMapRepo.findByTaskId(taskId);
+  }
+
+  computeActualImpact(taskId: string, changedFiles: string[]): ImpactMap {
+    const planned = this.impactMaps.get(taskId) || this.impactMapRepo.findByTaskId(taskId);
+    const module = planned?.target.module || changedFiles[0]?.split('/')[0] || '';
+    const target: ChangeTarget = { module, files: changedFiles };
+    return this.analyzeImpact(taskId, target, 'deep');
+  }
+
+  compareImpact(planned: ImpactMap, actual: ImpactMap): ImpactComparisonResult {
+    const plannedUpstreamNames = new Set(planned.upstreamDependencies.map((m) => m.name));
+    const plannedDownstreamNames = new Set(planned.downstreamDependents.map((m) => m.name));
+    const plannedContractIds = new Set(planned.contractsTouched.map((c) => c.id));
+    const plannedTestCommands = new Set(planned.affectedTests.map((t) => t.command));
+    const plannedFiles = new Set(planned.target.files);
+
+    const newUpstream = actual.upstreamDependencies.filter((m) => !plannedUpstreamNames.has(m.name));
+    const newDownstream = actual.downstreamDependents.filter((m) => !plannedDownstreamNames.has(m.name));
+    const newContractsTouched = actual.contractsTouched.filter((c) => !plannedContractIds.has(c.id));
+    const newAffectedTests = actual.affectedTests.filter((t) => !plannedTestCommands.has(t.command));
+    const outOfScopeFiles = actual.target.files.filter((f) => !plannedFiles.has(f));
+
+    const match = newUpstream.length === 0
+      && newDownstream.length === 0
+      && newContractsTouched.length === 0
+      && newAffectedTests.length === 0
+      && outOfScopeFiles.length === 0;
+
+    return {
+      match,
+      newUpstream,
+      newDownstream,
+      newContractsTouched,
+      newAffectedTests,
+      outOfScopeFiles,
+    };
   }
 
   comparePlannedVsActual(taskId: string): { match: boolean; differences: string[] } {

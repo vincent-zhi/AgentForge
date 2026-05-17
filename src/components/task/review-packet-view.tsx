@@ -154,8 +154,11 @@ const ReviewPacketView: React.FC<ReviewPacketViewProps> = React.memo(({ packet }
           <div className="text-xs text-forged-steel mb-1">Changed Files</div>
           <div className="space-y-1">
             {packet.changedFiles.map((f: ChangedFile, i: number) => (
-              <div key={i} className="flex items-center gap-2 px-2 py-1 rounded-sm bg-forge-black/50">
+              <div key={i} className={`flex items-center gap-2 px-2 py-1 rounded-sm ${f.outOfScope ? 'bg-risk-red/10 border border-risk-red/30' : 'bg-forge-black/50'}`}>
                 <span className="text-xs font-mono text-bright-steel flex-1 truncate">{f.path}</span>
+                {f.outOfScope && (
+                  <Badge variant="blocked" label="OUT OF SCOPE" />
+                )}
                 <Badge variant={intentVariant[f.intent] ?? 'default'} label={intentLabels[f.intent] ?? f.intent} />
                 <span className="text-[10px] text-safe-green">+{f.additions}</span>
                 <span className="text-[10px] text-risk-red">-{f.deletions}</span>
@@ -269,6 +272,30 @@ const ReviewPacketView: React.FC<ReviewPacketViewProps> = React.memo(({ packet }
                 <div className="text-[10px] text-forged-steel pl-2">{m.reason}</div>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {packet.plannedVsActual && (
+        <div>
+          <div className="text-xs text-forged-steel mb-1">Planned vs Actual Impact</div>
+          <div className={`px-2 py-1.5 rounded-sm ${packet.plannedVsActual.match ? 'bg-safe-green/10 border border-safe-green/20' : 'bg-ember-orange/10 border border-ember-orange/20'}`}>
+            <div className="flex items-center gap-2">
+              <Badge variant={packet.plannedVsActual.match ? 'verified' : 'blocked'} label={packet.plannedVsActual.match ? 'MATCH' : 'MISMATCH'} />
+              <span className="text-xs text-bright-steel">
+                {packet.plannedVsActual.newContractsTouched > 0 && `${packet.plannedVsActual.newContractsTouched} new contract(s) `}
+                {packet.plannedVsActual.newAffectedTests > 0 && `${packet.plannedVsActual.newAffectedTests} new test(s) `}
+                {packet.plannedVsActual.outOfScopeFiles.length > 0 && `${packet.plannedVsActual.outOfScopeFiles.length} out-of-scope file(s)`}
+                {packet.plannedVsActual.match && 'No differences detected'}
+              </span>
+            </div>
+            {packet.plannedVsActual.outOfScopeFiles.length > 0 && (
+              <div className="mt-1 space-y-0.5">
+                {packet.plannedVsActual.outOfScopeFiles.map((file: string, i: number) => (
+                  <div key={i} className="text-[10px] text-risk-red font-mono pl-2">{file}</div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}

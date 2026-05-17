@@ -35,4 +35,15 @@ export class AuditLogger {
   logLeaseEvent(leaseId: string, event: string): void {
     this.logAccess('system', 'lease_event', leaseId, { event });
   }
+
+  logAgentAction(agentId: string, action: string, target: string, details?: Record<string, unknown>): void {
+    this.auditLogRepo.insert({
+      id: uuidv4(),
+      agentId,
+      action,
+      target,
+      timestamp: new Date().toISOString(),
+      details: { ...details, source: 'agent_action' },
+    });
+  }
 }

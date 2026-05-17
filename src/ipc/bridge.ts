@@ -131,6 +131,9 @@ export const bridge = {
     applyProposal: (proposal: any) => invoke(channels.MEMORY.APPLY_PROPOSAL, { proposal }),
     rejectProposal: (proposalId: string) => invoke(channels.MEMORY.REJECT_PROPOSAL, { proposalId }),
   },
+  brain: {
+    revertTaskUpdates: (taskId: string) => invoke(channels.BRAIN.REVERT_TASK, { taskId }) as Promise<number>,
+  },
   sandbox: {
     create: (projectPath: string, config?: any) => invoke(channels.SANDBOX.CREATE, { projectPath, config }),
     execute: (sandboxId: string, command: string, cwd?: string) => invoke(channels.SANDBOX.EXECUTE, { sandboxId, command, cwd }),
@@ -140,6 +143,18 @@ export const bridge = {
   updater: {
     check: () => invoke(channels.UPDATER.CHECK, {}),
     install: () => invoke(channels.UPDATER.INSTALL, {}),
+  },
+  lease: {
+    requestEscalation: (leaseId: string, resource: string, reason: string) => invoke(channels.LEASE.ESCALATION_REQUEST, { leaseId, resource, reason }),
+    respondEscalation: (requestId: string, approved: boolean) => invoke(channels.LEASE.ESCALATION_RESPOND, { requestId, approved }),
+  },
+  feature: {
+    check: (feature: string) => invoke(channels.FEATURE.CHECK, { feature }),
+    getTier: () => invoke(channels.FEATURE.TIER_GET, {}),
+    setTier: (tier: string) => invoke(channels.FEATURE.TIER_SET, { tier }),
+  },
+  audit: {
+    query: (filters?: { agentId?: string; action?: string; startTime?: string; endTime?: string }) => invoke(channels.AUDIT.QUERY, { filters }),
   },
 };
 

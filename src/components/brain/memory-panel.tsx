@@ -46,6 +46,7 @@ const MemoryPanel: React.FC = React.memo(() => {
   const [typeFilter, setTypeFilter] = useState<FactType | 'all'>('all');
   const [confidenceFilter, setConfidenceFilter] = useState<Confidence | 'all'>('all');
   const [statusFilter, setStatusFilter] = useState<FactStatus | 'all'>('all');
+  const [revertTaskId, setRevertTaskId] = useState('');
 
   const filteredFacts = useMemo(() => {
     return facts.filter((f) => {
@@ -83,6 +84,14 @@ const MemoryPanel: React.FC = React.memo(() => {
       updateFact(factId, { status: 'active', updatedAt: new Date().toISOString() });
     } catch {}
   }, [updateFact]);
+
+  const handleRevertTaskUpdates = useCallback(async () => {
+    if (!revertTaskId.trim()) return;
+    try {
+      await bridge.brain.revertTaskUpdates(revertTaskId.trim());
+      setRevertTaskId('');
+    } catch {}
+  }, [revertTaskId]);
 
   const renderActions = (fact: ProjectFact) => {
     switch (fact.status) {
@@ -159,6 +168,21 @@ const MemoryPanel: React.FC = React.memo(() => {
             <option key={s} value={s}>{s}</option>
           ))}
         </select>
+        <div className="flex items-center gap-1.5 ml-2">
+          <input
+            type="text"
+            value={revertTaskId}
+            onChange={(e) => setRevertTaskId(e.target.value)}
+            placeholder="Task ID"
+            className="bg-graphite text-bright-steel text-xs rounded-sm px-2 py-1 border border-forged-steel/20 focus:outline-none focus:border-ember-orange w-28"
+          />
+          <button
+            onClick={handleRevertTaskUpdates}
+            className="px-2 py-0.5 text-xs rounded-sm bg-forged-steel/20 text-forged-steel hover:bg-forged-steel/30 transition-colors duration-fast"
+          >
+            Revert Task Updates
+          </button>
+        </div>
         <span className="text-xs text-forged-steel ml-auto">
           {filteredFacts.length} fact{filteredFacts.length !== 1 ? 's' : ''}
         </span>

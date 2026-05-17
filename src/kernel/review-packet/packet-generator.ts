@@ -12,6 +12,7 @@ import type {
   IntentType,
 } from '@/types/core';
 import { identifyUnverifiedItems } from './unverified-identifier';
+import type { GuardEngine } from '../impact-guard/guard-engine';
 
 function determineResult(
   verification: VerificationResult[],
@@ -208,6 +209,23 @@ function checkOutOfScope(capsule: TaskCapsule, changedFiles: ChangedFile[]): boo
   return false;
 }
 
+export function detectOutOfScopeChanges(capsule: TaskCapsule, changedFiles: string[]): string[] {
+  const allowedPaths = [...capsule.writable, ...capsule.readonly];
+  const outOfScope: string[] = [];
+  for (const file of changedFiles) {
+    const isAllowed = allowedPaths.some(
+      (p) => file.startsWith(p) || file === p
+    );
+    const isForbidden = capsule.forbidden.some(
+      (f) => file.startsWith(f) || file === f
+    );
+    if (!isAllowed || isForbidden) {
+      outOfScope.push(file);
+    }
+  }
+  return outOfScope;
+}
+
 function checkBreakingChanges(
   impactMap: ImpactMap,
   verification: VerificationResult[]
@@ -235,7 +253,9 @@ export function generatePacket(
   impactMap: ImpactMap,
   evidenceEntries: EvidenceEntry[],
   changedFiles: ChangedFile[],
-  intentDiffs: IntentDiff[]
+  intentDiffs: IntentDiff[],
+  actualImpactMap?: ImpactMap,
+  guardEngine?: GuardEngine,
 ): ReviewPacket {
   const testEntries = evidenceEntries.filter((e) => e.type === 'test');
   const contractEntries = evidenceEntries.filter(
@@ -269,14 +289,31 @@ export function generatePacket(
 
   const isOutOfScope = checkOutOfScope(capsule, changedFiles);
 
+  const outOfScopePaths = detectOutOfScopeChanges(capsule, changedFiles.map((f) => f.path));
+  const markedChangedFiles = changedFiles.map((f) => ({
+    ...f,
+    outOfScope: outOfScopePaths.includes(f.path),
+  }));
+
   const hasBreakingChange = checkBreakingChanges(impactMap, verification);
 
   const result = determineResult(verification, unverifiedItems);
 
+  let plannedVsActual: ReviewPacket['plannedVsActual'];
+  if (actualImpactMap && guardEngine) {
+    const comparison = guardEngine.compareImpact(impactMap, actualImpactMap);
+    plannedVsActual = {
+      match: comparison.match,
+      outOfScopeFiles: comparison.outOfScopeFiles,
+      newContractsTouched: comparison.newContractsTouched.length,
+      newAffectedTests: comparison.newAffectedTests.length,
+    };
+  }
+
   return {
     taskId,
     result,
-    changedFiles,
+    changedFiles: markedChangedFiles,
     intentDiff: intentDiffs,
     impactMap,
     verification,
@@ -287,5 +324,6 @@ export function generatePacket(
     suggestedPr,
     isOutOfScope,
     hasBreakingChange,
+    plannedVsActual,
   };
 }

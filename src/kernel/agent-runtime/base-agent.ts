@@ -90,6 +90,22 @@ export abstract class BaseAgent {
     this.publishEvent('agent_log', { action, target, role: this.role });
   }
 
+  protected auditLog(action: string, target: string, details?: Record<string, unknown>): void {
+    this.blackboard.publish({
+      type: 'audit_log',
+      agentId: this.id,
+      taskId: this.taskId,
+      data: {
+        agentId: this.id,
+        role: this.role,
+        action,
+        target,
+        details,
+        timestamp: new Date().toISOString(),
+      },
+    });
+  }
+
   setLease(lease: ContextLease): void {
     this.lease = lease;
   }

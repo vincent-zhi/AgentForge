@@ -4,7 +4,7 @@ import { ProjectFactRepository } from '../../db/repositories/project-fact-repo';
 const PROMOTION_EVIDENCE_SOURCES: Evidence['source'][] = ['code', 'test', 'pr', 'ci', 'human'];
 const CANDIDATE_ONLY_SOURCES: Evidence['source'][] = ['agent_inference'];
 
-type StoredProposal = MemoryUpdateProposal & { id: string; proposalStatus: 'pending' | 'approved' | 'rejected' };
+type StoredProposal = MemoryUpdateProposal & { id: string; proposalStatus: 'pending' | 'approved' | 'rejected'; taskId?: string; previousState?: Partial<ProjectFact>; createdFactId?: string };
 
 export class FactGovernor {
   private factRepo: ProjectFactRepository;
@@ -44,7 +44,7 @@ export class FactGovernor {
     this.factRepo.updateStatus(factId, 'rejected');
   }
 
-  generateMemoryUpdateProposal(_taskId: string): MemoryUpdateProposal[] {
+  generateMemoryUpdateProposal(taskId: string): MemoryUpdateProposal[] {
     const proposals: MemoryUpdateProposal[] = [];
     const candidateFacts = this.factRepo.findByStatus('candidate');
     const staleFacts = this.factRepo.findByStatus('stale');
@@ -82,6 +82,7 @@ export class FactGovernor {
         ...proposal,
         id: `prop_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
         proposalStatus: 'pending',
+        taskId,
       };
       this.proposals.push(stored);
     }
@@ -90,7 +91,7 @@ export class FactGovernor {
   }
 
   generateUpdateProposals(
-    _taskId: string,
+    taskId: string,
     changedFiles: Array<{ path: string; intent: string; additions: number; deletions: number }>,
     _impactMap: ImpactMap,
   ): MemoryUpdateProposal[] {
@@ -179,6 +180,7 @@ export class FactGovernor {
         ...proposal,
         id: `prop_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
         proposalStatus: 'pending',
+        taskId,
       };
       this.proposals.push(stored);
     }
@@ -187,6 +189,10 @@ export class FactGovernor {
   }
 
   applyProposal(proposal: MemoryUpdateProposal): void {
+    const storedProposal = this.proposals.find(
+      (p) => p.factId === proposal.factId && p.action === proposal.action && p.proposalStatus === 'pending',
+    );
+
     if (proposal.action === 'create') {
       const newFact: ProjectFact = {
         id: `fact_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
@@ -201,7 +207,20 @@ export class FactGovernor {
         updatedAt: new Date().toISOString(),
       };
       this.factRepo.insert(newFact);
+      if (storedProposal) {
+        storedProposal.createdFactId = newFact.id;
+        storedProposal.proposalStatus = 'approved';
+      }
     } else if (proposal.factId) {
+      const existingFact = this.factRepo.findById(proposal.factId);
+      if (storedProposal && existingFact) {
+        storedProposal.previousState = {
+          status: existingFact.status,
+          confidence: existingFact.confidence,
+          evidence: existingFact.evidence,
+          updatedAt: existingFact.updatedAt,
+        };
+      }
       if (proposal.action === 'update') {
         if (proposal.fact.status) {
           this.factRepo.updateStatus(proposal.factId, proposal.fact.status);
@@ -213,6 +232,9 @@ export class FactGovernor {
         this.factRepo.updateStatus(proposal.factId, 'stale');
       } else if (proposal.action === 'reject') {
         this.factRepo.updateStatus(proposal.factId, 'rejected');
+      }
+      if (storedProposal) {
+        storedProposal.proposalStatus = 'approved';
       }
     }
   }
@@ -230,6 +252,39 @@ export class FactGovernor {
     }
 
     return true;
+  }
+
+  revertByTaskId(taskId: string): number {
+    const taskProposals = this.proposals.filter((p) => p.taskId === taskId && p.proposalStatus === 'approved');
+    let revertedCount = 0;
+
+    for (const proposal of taskProposals) {
+      if (proposal.action === 'create') {
+        if (proposal.createdFactId) {
+          this.factRepo.deleteById(proposal.createdFactId);
+        }
+        revertedCount++;
+      } else if (proposal.action === 'update') {
+        if (proposal.factId && proposal.previousState) {
+          if (proposal.previousState.status) {
+            this.factRepo.updateStatus(proposal.factId, proposal.previousState.status);
+          }
+          if (proposal.previousState.confidence) {
+            this.factRepo.updateConfidence(proposal.factId, proposal.previousState.confidence);
+          }
+        }
+        revertedCount++;
+      } else if (proposal.action === 'stale') {
+        if (proposal.factId) {
+          this.factRepo.updateStatus(proposal.factId, 'active');
+        }
+        revertedCount++;
+      }
+
+      proposal.proposalStatus = 'rejected';
+    }
+
+    return revertedCount;
   }
 
   private calculateConfidence(evidence: Evidence[]): 'low' | 'medium' | 'high' {

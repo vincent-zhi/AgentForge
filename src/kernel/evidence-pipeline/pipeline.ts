@@ -47,6 +47,26 @@ export class EvidencePipeline {
     return entry;
   }
 
+  collectCiEvidence(workflowName: string, status: string, duration: number, logSummary: string): EvidenceEntry {
+    const entry: EvidenceEntry = {
+      id: `ev-ci-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      taskId: '',
+      agentId: '',
+      type: 'ci',
+      content: `[ci] ${workflowName}`,
+      result: status,
+      timestamp: new Date().toISOString(),
+      metadata: {
+        workflowName,
+        status,
+        duration,
+        logSummary,
+      },
+    };
+    this.evidenceRepo.insert(entry);
+    return entry;
+  }
+
   getCommandTracker(): CommandTracker {
     return this.commandTracker;
   }

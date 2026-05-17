@@ -1,7 +1,10 @@
 export type TaskComplexity = 'lightweight' | 'standard' | 'strict';
 
+export type ImpactStrategy = 'quick' | 'deep';
+
 export interface TaskClassification {
   complexity: TaskComplexity;
+  strategy: ImpactStrategy;
   reasons: string[];
   estimatedFiles: number;
   hasContractImpact: boolean;
@@ -46,6 +49,7 @@ export function classifyTask(
   const touchesHighRisk = context?.highRiskPaths?.some((p) => goalLower.includes(p.toLowerCase())) ?? false;
 
   let complexity: TaskComplexity = isLightweightMatch ? 'lightweight' : 'standard';
+  let strategy: ImpactStrategy = isLightweightMatch ? 'quick' : 'deep';
 
   if (isLightweightMatch) {
     reasons.push('Goal matches lightweight pattern');
@@ -55,6 +59,7 @@ export function classifyTask(
     reasons.push('Goal touches high-risk path');
     riskLevel = 'high';
     complexity = 'strict';
+    strategy = 'deep';
   }
 
   if (isStrictMatch) {
@@ -62,6 +67,7 @@ export function classifyTask(
     hasContractImpact = true;
     riskLevel = 'critical';
     complexity = 'strict';
+    strategy = 'deep';
   }
 
   if (isCrossModuleMatch) {
@@ -69,6 +75,7 @@ export function classifyTask(
     estimatedFiles = 5;
     riskLevel = riskLevel === 'critical' ? 'critical' : 'high';
     complexity = 'strict';
+    strategy = 'deep';
   }
 
   if (context?.contractCount && context.contractCount > 0) {
@@ -76,6 +83,7 @@ export function classifyTask(
     hasContractImpact = true;
     if (complexity !== 'strict') {
       complexity = 'standard';
+      strategy = 'deep';
       riskLevel = riskLevel === 'low' ? 'medium' : riskLevel;
     }
   }
@@ -85,6 +93,7 @@ export function classifyTask(
     estimatedFiles = Math.max(estimatedFiles, 3);
     if (complexity === 'lightweight') {
       complexity = 'standard';
+      strategy = 'deep';
       riskLevel = 'medium';
     }
   }
@@ -93,6 +102,7 @@ export function classifyTask(
     estimatedFiles = 1;
     hasContractImpact = false;
     riskLevel = 'low';
+    strategy = 'quick';
   }
 
   if (complexity === 'standard' && reasons.length === 0) {
@@ -103,6 +113,7 @@ export function classifyTask(
 
   return {
     complexity,
+    strategy,
     reasons,
     estimatedFiles,
     hasContractImpact,

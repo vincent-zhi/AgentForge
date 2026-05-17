@@ -127,6 +127,7 @@ export interface ChangedFile {
   intent: IntentType;
   additions: number;
   deletions: number;
+  outOfScope?: boolean;
 }
 
 export interface IntentDiff {
@@ -184,13 +185,19 @@ export interface ReviewPacket {
   suggestedPr: SuggestedPr;
   isOutOfScope: boolean;
   hasBreakingChange: boolean;
+  plannedVsActual?: {
+    match: boolean;
+    outOfScopeFiles: string[];
+    newContractsTouched: number;
+    newAffectedTests: number;
+  };
 }
 
 export interface EvidenceEntry {
   id: string;
   taskId: string;
   agentId: string;
-  type: 'command' | 'test' | 'git' | 'agent_log' | 'file_read' | 'file_write' | 'sandbox';
+  type: 'command' | 'test' | 'git' | 'agent_log' | 'file_read' | 'file_write' | 'sandbox' | 'ci';
   content: string;
   result?: string;
   timestamp: string;
@@ -227,6 +234,9 @@ export interface ModuleInfo {
   riskLevel: RiskLevel;
 }
 
+export type FeatureTier = 'free' | 'pro' | 'team' | 'enterprise';
+export type FeatureName = 'project_brain' | 'impact_guard' | 'single_agent' | 'multi_agent' | 'context_lease' | 'evidence_review' | 'worktree_sandbox' | 'team_brain' | 'pr_integration' | 'team_policy' | 'agent_audit' | 'custom_agent' | 'private_model' | 'sso' | 'rbac';
+
 export type MonorepoType = 'pnpm' | 'nx' | 'lerna' | 'yarn' | 'npm' | 'turborepo' | 'none';
 
 export interface TsconfigPathMapping {
@@ -252,3 +262,11 @@ export interface ProjectScanResult {
   tsconfigPaths?: TsconfigPathMapping[];
   tsconfigReferences?: TsconfigReference[];
 }
+
+export type ModelPermissionPolicy = {
+  allowedModels: string[];
+  localOnlyPaths: string[];
+  maxCostPerTask: number;
+  allowThirdParty: boolean;
+  maxContextSize: number;
+};

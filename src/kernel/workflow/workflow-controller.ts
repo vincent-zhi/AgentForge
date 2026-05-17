@@ -30,6 +30,7 @@ export class WorkflowController {
   private impactRepo: ImpactMapRepository;
   private worktreeManager: WorktreeManager | null = null;
   private mainWindow: BrowserWindow | null = null;
+  private isIsolated: Map<string, boolean> = new Map();
   private currentTaskId: string | null = null;
   private currentStep: WorkflowStep = 'parsing';
   private projectPath: string = '';
@@ -86,7 +87,7 @@ export class WorkflowController {
         module: capsule.affectedModules[0]?.name || capsule.writable[0] || '',
         files: capsule.writable,
       };
-      const impactAnalysis = this._guardEngine.analyzeImpact(this.currentTaskId, target);
+      const impactAnalysis = this._guardEngine.analyzeImpact(this.currentTaskId, target, classification.strategy);
 
       this.setStep('creating_leases');
       this._leaseManager.createLease(
@@ -99,16 +100,28 @@ export class WorkflowController {
       if (this.worktreeManager && this.projectPath) {
         try {
           const worktreePath = await this.worktreeManager.createForTask(this.projectPath, this.currentTaskId);
+          this.isIsolated.set(this.currentTaskId!, true);
           this.emitEvent('worktree_created', { taskId: this.currentTaskId, path: worktreePath });
         } catch (err) {
+          this.isIsolated.set(this.currentTaskId!, false);
           this.emitEvent('worktree_error', { taskId: this.currentTaskId, error: err instanceof Error ? err.message : String(err) });
         }
+      } else {
+        this.isIsolated.set(this.currentTaskId!, false);
       }
 
       this.setStep('executing_agents');
       try {
         await this.agentRuntime.startTask(capsule);
       } catch (err) {
+        if (this.isIsolated.get(this.currentTaskId!) && this.worktreeManager && this.projectPath) {
+          try {
+            await this.worktreeManager.discardWorktree(this.projectPath, this.currentTaskId!);
+            this.emitEvent('worktree_discarded', { taskId: this.currentTaskId });
+          } catch (discardErr) {
+            this.emitEvent('worktree_error', { taskId: this.currentTaskId, error: discardErr instanceof Error ? discardErr.message : String(discardErr) });
+          }
+        }
         this.updateTaskStatus(this.currentTaskId!, 'failed');
         this.emitTaskStatus('failed');
         this.setStep('failed');
@@ -118,13 +131,29 @@ export class WorkflowController {
       this.setStep('collecting_evidence');
       this.setStep('generating_review');
       const evidence = this.pipeline.getEvidenceStack(this.currentTaskId);
+      const changedFileEvents = this.agentRuntime.getBlackboard().getEvents(this.currentTaskId)
+        .filter((e) => e.type === 'code_modified')
+        .flatMap((e) => (e.data.files as string[]) || []);
+      const actualImpactMap = changedFileEvents.length > 0
+        ? this._guardEngine.computeActualImpact(this.currentTaskId, changedFileEvents)
+        : undefined;
       const packet = generatePacket(
         this.currentTaskId, capsule, impactAnalysis, evidence,
         [], [],
+        actualImpactMap, this._guardEngine,
       );
 
       this.setStep('checking_safe_apply');
     const checks = runSafeApplyChecks(this.currentTaskId, packet);
+
+    if (this.isIsolated.get(this.currentTaskId!) && this.worktreeManager && this.projectPath) {
+      try {
+        await this.worktreeManager.mergeWorktree(this.projectPath, this.currentTaskId!);
+        this.emitEvent('worktree_merged', { taskId: this.currentTaskId });
+      } catch (mergeErr) {
+        this.emitEvent('worktree_error', { taskId: this.currentTaskId, error: mergeErr instanceof Error ? mergeErr.message : String(mergeErr) });
+      }
+    }
 
     this.impactRepo.insert(impactAnalysis);
 
@@ -177,7 +206,7 @@ export class WorkflowController {
       module: capsule.affectedModules[0]?.name || capsule.writable[0] || '',
       files: capsule.writable,
     };
-    const impactAnalysis = this._guardEngine.analyzeImpact(taskId, target);
+    const impactAnalysis = this._guardEngine.analyzeImpact(taskId, target, this.taskClassifications.get(taskId)?.strategy);
 
     this.setStep('creating_leases');
     this._leaseManager.createLease(
@@ -190,16 +219,28 @@ export class WorkflowController {
     if (this.worktreeManager && this.projectPath) {
       try {
         const worktreePath = await this.worktreeManager.createForTask(this.projectPath, taskId);
+        this.isIsolated.set(taskId, true);
         this.emitEvent('worktree_created', { taskId, path: worktreePath });
       } catch (err) {
+        this.isIsolated.set(taskId, false);
         this.emitEvent('worktree_error', { taskId, error: err instanceof Error ? err.message : String(err) });
       }
+    } else {
+      this.isIsolated.set(taskId, false);
     }
 
     this.setStep('executing_agents');
     try {
       await this.agentRuntime.startTask(capsule);
     } catch (err) {
+      if (this.isIsolated.get(taskId) && this.worktreeManager && this.projectPath) {
+        try {
+          await this.worktreeManager.discardWorktree(this.projectPath, taskId);
+          this.emitEvent('worktree_discarded', { taskId });
+        } catch (discardErr) {
+          this.emitEvent('worktree_error', { taskId, error: discardErr instanceof Error ? discardErr.message : String(discardErr) });
+        }
+      }
       this.updateTaskStatus(taskId, 'failed');
       this.emitTaskStatus('failed');
       this.setStep('failed');
@@ -210,13 +251,29 @@ export class WorkflowController {
 
     this.setStep('generating_review');
     const evidence = this.pipeline.getEvidenceStack(taskId);
+    const changedFileEvents = this.agentRuntime.getBlackboard().getEvents(taskId)
+      .filter((e) => e.type === 'code_modified')
+      .flatMap((e) => (e.data.files as string[]) || []);
+    const actualImpactMap = changedFileEvents.length > 0
+      ? this._guardEngine.computeActualImpact(taskId, changedFileEvents)
+      : undefined;
     const packet = generatePacket(
       taskId, capsule, impactAnalysis, evidence,
-      [], []
+      [], [],
+      actualImpactMap, this._guardEngine,
     );
 
     this.setStep('checking_safe_apply');
     const checks = runSafeApplyChecks(taskId, packet);
+
+    if (this.isIsolated.get(taskId) && this.worktreeManager && this.projectPath) {
+      try {
+        await this.worktreeManager.mergeWorktree(this.projectPath, taskId);
+        this.emitEvent('worktree_merged', { taskId });
+      } catch (mergeErr) {
+        this.emitEvent('worktree_error', { taskId, error: mergeErr instanceof Error ? mergeErr.message : String(mergeErr) });
+      }
+    }
 
     this.updateTaskStatus(taskId, 'reviewing');
     this.emitTaskStatus('reviewing');

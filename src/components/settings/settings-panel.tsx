@@ -35,6 +35,8 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ open, onClose }) =
   const [allowedModels, setAllowedModels] = useState<string[]>(['gpt-4', 'gpt-3.5-turbo', 'claude-3-opus', 'claude-3-sonnet']);
   const [maxCostPerTask, setMaxCostPerTask] = useState('10');
   const [maxContextSize, setMaxContextSize] = useState('128000');
+  const [allowThirdParty, setAllowThirdParty] = useState(true);
+  const [localOnlyPaths, setLocalOnlyPaths] = useState('');
   const [plugins, setPlugins] = useState<{
     analyzers: Array<{ name: string; version: string }>;
     contractExtractors: Array<{ name: string; version: string }>;
@@ -62,6 +64,8 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ open, onClose }) =
             setAllowedModels(policy.modelPermissions.allowedModels ?? ['gpt-4', 'gpt-3.5-turbo', 'claude-3-opus', 'claude-3-sonnet']);
             setMaxCostPerTask(String(policy.modelPermissions.maxCostPerTask ?? 10));
             setMaxContextSize(String(policy.modelPermissions.maxContextSize ?? 128000));
+            setAllowThirdParty(policy.modelPermissions.allowThirdParty ?? true);
+            setLocalOnlyPaths(policy.modelPermissions.localOnlyPaths?.join('\n') ?? '');
           }
         }
       } catch {}
@@ -99,10 +103,12 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ open, onClose }) =
         allowedModels,
         maxCostPerTask: parseFloat(maxCostPerTask) || 10,
         maxContextSize: parseInt(maxContextSize, 10) || 128000,
+        allowThirdParty,
+        localOnlyPaths: localOnlyPaths.split('\n').filter(Boolean),
       },
     }));
     onClose();
-  }, [openaiApiKey, anthropicApiKey, defaultModel, riskPaths, commandWhitelist, theme, forbiddenPatterns, allowedModels, maxCostPerTask, maxContextSize, onClose]);
+  }, [openaiApiKey, anthropicApiKey, defaultModel, riskPaths, commandWhitelist, theme, forbiddenPatterns, allowedModels, maxCostPerTask, maxContextSize, allowThirdParty, localOnlyPaths, onClose]);
 
   if (!open) return null;
 
@@ -276,6 +282,24 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ open, onClose }) =
                         step="1000"
                       />
                     </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={allowThirdParty}
+                      onChange={(e) => setAllowThirdParty(e.target.checked)}
+                      className="accent-ember-orange"
+                    />
+                    <label className="text-xs text-text-gray">允许第三方模型提供商</label>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] text-forged-steel mb-1">仅限本地模型路径</label>
+                    <textarea
+                      value={localOnlyPaths}
+                      onChange={(e) => setLocalOnlyPaths(e.target.value)}
+                      className="input-field text-sm min-h-[60px] resize-y"
+                      placeholder="每行一个路径 (匹配此路径的任务仅允许使用本地模型)..."
+                    />
                   </div>
                 </div>
               </div>

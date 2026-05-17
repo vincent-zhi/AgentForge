@@ -46,6 +46,18 @@ export class WorktreeManager {
     return info ? { branch: info.branch, path: info.path } : undefined;
   }
 
+  async create(projectPath: string, taskId: string): Promise<string> {
+    return this.createForTask(projectPath, taskId);
+  }
+
+  async merge(projectPath: string, taskId: string): Promise<void> {
+    return this.mergeWorktree(projectPath, taskId);
+  }
+
+  async discard(projectPath: string, taskId: string): Promise<void> {
+    return this.discardWorktree(projectPath, taskId);
+  }
+
   private emitEvent(type: string, data: Record<string, unknown>): void {
     if (this.mainWindow && !this.mainWindow.isDestroyed()) {
       this.mainWindow.webContents.send(EVENT_CHANNELS.NOTIFICATION, { type, ...data });

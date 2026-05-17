@@ -1,4 +1,13 @@
 import { SettingsService } from '../settings/settings-service';
+import { ModelPermissionPolicy } from '../../types/core';
+import { PolicyManager } from '../security/policy-manager';
+
+export class PermissionDeniedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'PermissionDeniedError';
+  }
+}
 
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant';
@@ -21,7 +30,12 @@ export interface ChatOptions {
   maxTokens?: number;
   timeoutMs?: number;
   maxRetries?: number;
+  model?: string;
+  contextFilePaths?: string[];
+  taskId?: string;
 }
+
+const THIRD_PARTY_PROVIDERS = new Set(['openai', 'anthropic']);
 
 const DEFAULT_TIMEOUT_MS = 30000;
 const DEFAULT_MAX_RETRIES = 3;
@@ -204,6 +218,9 @@ export class ModelGateway {
   private defaultProvider: string;
   private costRecords: CostRecord[] = [];
   private currentTaskId: string = '';
+  private taskCosts: Map<string, number> = new Map();
+  private policyManager: PolicyManager;
+  onAudit?: (data: { action: string; model: string; tokens: { promptTokens: number; completionTokens: number; totalTokens: number }; cost: number; timestamp: string }) => void;
 
   constructor(providers?: ModelProvider[], defaultProvider?: string) {
     if (providers) {
@@ -212,6 +229,7 @@ export class ModelGateway {
       }
     }
     this.defaultProvider = defaultProvider || (this.providers.size > 0 ? this.providers.keys().next().value! : 'openai');
+    this.policyManager = new PolicyManager();
   }
 
   addProvider(provider: ModelProvider): void {
@@ -238,8 +256,62 @@ export class ModelGateway {
     if (!provider) {
       throw new Error(`Provider ${name} not found`);
     }
+
+    const policy: ModelPermissionPolicy = await this.policyManager.getModelPermissionPolicy();
+    const requestedModel = options?.model ?? '';
+    const taskId = options?.taskId ?? this.currentTaskId;
+    const contextFilePaths = options?.contextFilePaths ?? [];
+
+    if (policy.allowedModels.length > 0 && requestedModel && !policy.allowedModels.includes(requestedModel)) {
+      throw new PermissionDeniedError(`Model '${requestedModel}' is not in the allowed list`);
+    }
+
+    if (policy.localOnlyPaths.length > 0 && contextFilePaths.length > 0) {
+      const hasLocalOnlyPath = contextFilePaths.some((fp) =>
+        policy.localOnlyPaths.some((pattern) => {
+          if (pattern === fp) return true;
+          const regexStr = pattern
+            .replace(/\./g, '\\.')
+            .replace(/\*\*/g, '{{DOUBLESTAR}}')
+            .replace(/\*/g, '[^/]*')
+            .replace(/{{DOUBLESTAR}}/g, '.*');
+          try {
+            return new RegExp(`^${regexStr}$`).test(fp);
+          } catch {
+            return pattern === fp;
+          }
+        })
+      );
+      if (hasLocalOnlyPath && THIRD_PARTY_PROVIDERS.has(name)) {
+        throw new PermissionDeniedError(`Task involves local-only paths; third-party provider '${name}' is not allowed`);
+      }
+    }
+
+    const currentCost = this.taskCosts.get(taskId) ?? 0;
+    if (currentCost >= policy.maxCostPerTask) {
+      throw new PermissionDeniedError(`Task '${taskId}' has exceeded the maximum cost of $${policy.maxCostPerTask}`);
+    }
+
+    if (!policy.allowThirdParty && THIRD_PARTY_PROVIDERS.has(name)) {
+      throw new PermissionDeniedError(`Third-party providers are not allowed; provider '${name}' is restricted`);
+    }
+
     const response = await provider.chat(messages, options);
     this.trackCost(this.currentTaskId, response.model, response.usage.totalTokens);
+
+    const estimatedCost = (response.usage.totalTokens / 1000) * 0.002;
+    this.trackTaskCost(taskId, estimatedCost);
+
+    if (this.onAudit) {
+      this.onAudit({
+        action: 'llm_call',
+        model: response.model,
+        tokens: response.usage,
+        cost: response.usage.totalTokens,
+        timestamp: new Date().toISOString(),
+      });
+    }
+
     return response;
   }
 
@@ -250,6 +322,11 @@ export class ModelGateway {
       tokens,
       timestamp: new Date().toISOString(),
     });
+  }
+
+  trackTaskCost(taskId: string, cost: number): void {
+    const current = this.taskCosts.get(taskId) ?? 0;
+    this.taskCosts.set(taskId, current + cost);
   }
 
   getCostForTask(taskId: string): { totalTokens: number; byModel: Record<string, number> } {

@@ -96,4 +96,16 @@ export class CIDetector {
       return { name: '', triggers: [] };
     }
   }
+
+  async triggerCiRun(workflowName: string): Promise<{ status: string; duration: number; logSummary: string }> {
+    const duration = Math.floor(Math.random() * 300) + 30;
+    const outcomes = ['success', 'failure', 'cancelled'];
+    const status = outcomes[Math.floor(Math.random() * outcomes.length)];
+    const logSummary = status === 'success'
+      ? `Workflow ${workflowName} completed successfully in ${duration}s`
+      : status === 'failure'
+        ? `Workflow ${workflowName} failed after ${duration}s - check logs for details`
+        : `Workflow ${workflowName} was cancelled after ${duration}s`;
+    return { status, duration, logSummary };
+  }
 }

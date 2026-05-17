@@ -41,6 +41,9 @@ export class CoderAgent extends BaseAgent {
     this.publishEvent('file_claimed', { files, agentId: this.id });
     this.publishEvent('code_modified', { files, agentId: this.id, modifications });
     this.logAction('modify_code', 'source_files');
+    for (const mod of modifications) {
+      this.auditLog('file_modification', mod.filePath, { action: mod.action });
+    }
   }
 
   private getTaskSpec(): string {
