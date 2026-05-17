@@ -3,6 +3,8 @@ import { ImpactMapRepository } from '../../db/repositories/impact-map-repo';
 import { calculateImpact } from './impact-calculator';
 import { assessRisk } from './risk-assessor';
 import { recommendTests } from './test-recommender';
+import type { ProjectPolicy } from '../security/policy-manager';
+import { LRUCache } from '../cache/lru-cache';
 
 export class GuardEngine {
   private impactMapRepo: ImpactMapRepository;
@@ -11,9 +13,15 @@ export class GuardEngine {
   private riskMarkers: Map<string, RiskLevel> = new Map();
   private testMapping: TestCommand[] = [];
   private impactMaps: Map<string, ImpactMap> = new Map();
+  private policy: ProjectPolicy | null = null;
+  private impactCache: LRUCache<string, ImpactMap> = new LRUCache(30, 3 * 60 * 1000);
 
   constructor(impactMapRepo?: ImpactMapRepository) {
     this.impactMapRepo = impactMapRepo || new ImpactMapRepository();
+  }
+
+  setPolicy(policy: ProjectPolicy): void {
+    this.policy = policy;
   }
 
   setDependencyGraph(graph: Map<string, string[]>): void {
@@ -33,6 +41,12 @@ export class GuardEngine {
   }
 
   analyzeImpact(taskId: string, target: ChangeTarget): ImpactMap {
+    const cacheKey = `${taskId}:${target.module}:${target.files.sort().join(',')}`;
+    const cached = this.impactCache.get(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
     const { upstream, downstream, contractsTouched } = calculateImpact(
       target.module,
       target.files,
@@ -48,6 +62,31 @@ export class GuardEngine {
     for (const contract of contractsTouched) {
       if (contract.compatibility === 'must_preserve') {
         forbiddenChanges.push(`Contract "${contract.name}" must be preserved`);
+      }
+    }
+
+    if (this.policy) {
+      for (const file of target.files) {
+        if (this.policy.forbiddenPatterns.some((pattern) => {
+          if (pattern === file) return true;
+          const regexStr = pattern
+            .replace(/\./g, '\\.')
+            .replace(/\*\*/g, '{{DOUBLESTAR}}')
+            .replace(/\*/g, '[^/]*')
+            .replace(/{{DOUBLESTAR}}/g, '.*');
+          try {
+            return new RegExp(`^${regexStr}$`).test(file);
+          } catch {
+            return pattern === file;
+          }
+        })) {
+          forbiddenChanges.push(`File "${file}" matches forbidden pattern in policy`);
+        }
+      }
+      for (const riskPath of this.policy.riskPaths) {
+        if (target.files.some((f) => f.startsWith(riskPath))) {
+          forbiddenChanges.push(`File in risk path: ${riskPath}`);
+        }
       }
     }
 
@@ -75,6 +114,8 @@ export class GuardEngine {
 
     this.impactMaps.set(taskId, impactMap);
     this.impactMapRepo.insert(impactMap);
+
+    this.impactCache.set(cacheKey, impactMap);
 
     return impactMap;
   }
@@ -119,5 +160,9 @@ export class GuardEngine {
       hash |= 0;
     }
     return Math.abs(hash).toString(16);
+  }
+
+  invalidateCache(): void {
+    this.impactCache.clear();
   }
 }

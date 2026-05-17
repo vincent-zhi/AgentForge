@@ -12,6 +12,7 @@ import { TesterAgent } from './tester-agent';
 import { ReviewerAgent } from './reviewer-agent';
 import { DocAgent } from './doc-agent';
 import { LeaseManager } from '../context-lease/lease-manager';
+import type { ModelGateway } from '../model-gateway/model-gateway';
 
 interface AgentInfo {
   id: string;
@@ -36,6 +37,7 @@ const AGENT_CONSTRUCTORS: Record<AgentRole, new (id: string, taskId: string, bla
 export class AgentRuntime {
   private blackboard: Blackboard;
   private leaseManager: LeaseManager;
+  private modelGateway: ModelGateway | null = null;
   private agents: Map<string, BaseAgent> = new Map();
   private agentStatuses: Map<string, AgentInfo> = new Map();
   private runningTasks: Map<string, boolean> = new Map();
@@ -45,14 +47,26 @@ export class AgentRuntime {
     this.leaseManager = leaseManager || new LeaseManager();
   }
 
+  setModelGateway(gateway: ModelGateway): void {
+    this.modelGateway = gateway;
+  }
+
   async startTask(capsule: TaskCapsule): Promise<void> {
     this.runningTasks.set(capsule.id, true);
+
+    if (this.modelGateway) {
+      this.modelGateway.setCurrentTask(capsule.id);
+    }
 
     const orchestratorId = `agent-orchestrator-${uuidv4().slice(0, 8)}`;
     const orchestrator = new OrchestratorAgent(orchestratorId, capsule.id, this.blackboard, this.leaseManager);
 
     const lease = this.leaseManager.createLease(capsule.id, orchestratorId, 'orchestrator', capsule);
     orchestrator.setLease(lease);
+
+    if (this.modelGateway) {
+      orchestrator.setModelGateway(this.modelGateway);
+    }
 
     this.agents.set(orchestratorId, orchestrator);
     this.agentStatuses.set(orchestratorId, { id: orchestratorId, role: 'orchestrator', status: 'running' });
@@ -64,6 +78,9 @@ export class AgentRuntime {
       const agent = new AgentClass(agentId, capsule.id, this.blackboard, this.leaseManager);
       const agentLease = this.leaseManager.createLease(capsule.id, agentId, role, capsule);
       agent.setLease(agentLease);
+      if (this.modelGateway) {
+        agent.setModelGateway(this.modelGateway);
+      }
       this.agents.set(agentId, agent);
       this.agentStatuses.set(agentId, { id: agentId, role, status: 'idle' });
     }

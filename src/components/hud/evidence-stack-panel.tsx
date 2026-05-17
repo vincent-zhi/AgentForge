@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Badge } from '@/components/ui/badge';
+import { EvidenceCheckmark } from '@/components/ui/evidence-checkmark';
 import type { EvidenceEntry } from '@/types/core';
 
 interface EvidenceStackPanelProps {
@@ -81,6 +82,7 @@ const EvidenceStackPanel: React.FC<EvidenceStackPanelProps> = React.memo(({ entr
                     onClick={() => toggleExpand(e.id)}
                   >
                     <div className="flex items-center gap-2">
+                      <EvidenceCheckmark verified={e.result === 'pass' || e.result === 'success'} label={e.result} />
                       <span className="text-xs flex-1 text-bright-steel truncate">{e.content}</span>
                       {e.result && (
                         <Badge

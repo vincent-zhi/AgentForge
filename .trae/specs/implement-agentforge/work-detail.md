@@ -558,3 +558,149 @@
 - **依赖**: src/kernel/review-packet/packet-generator.ts, src/kernel/safe-apply/apply-gate.ts, src/kernel/memory-governance/fact-governor.ts
 - **为什么这么做**: 交付任务工作流，协调 Review Packet 生成→Safe Apply 检查→Brain 更新。
 - **后续联系**: 任务执行完成后触发。
+
+---
+
+## Phase 9: 交付闭环与高级工程能力
+
+### src/kernel/delivery/commit-generator.ts
+- **依赖**: src/kernel/review-packet/packet-generator.ts, src/kernel/intent-diff/intent-classifier.ts
+- **为什么这么做**: 基于 Review Packet 中的 Intent Diff 和 Impact Map 自动生成 commit message。PRD 第 10 节要求交付流程包含 commit message / PR description 生成。
+- **后续联系**: pr-generator.ts 使用 commit message 作为 PR body 的一部分。
+
+### src/kernel/delivery/pr-generator.ts
+- **依赖**: src/kernel/delivery/commit-generator.ts, src/kernel/review-packet/packet-generator.ts
+- **为什么这么做**: 基于 Review Packet 生成完整的 PR title、body 和 labels。PRD 第 10 节交付流程要求"生成 commit message / PR description"。
+- **后续联系**: pr-creator.ts 使用生成的 PR 信息创建远程 Pull Request。
+
+### src/kernel/delivery/pr-creator.ts
+- **依赖**: src/kernel/delivery/pr-generator.ts, src/kernel/runtime/git-manager.ts
+- **为什么这么做**: 通过 Git 推送分支并调用 GitHub API 创建 Pull Request。PRD 第 10 节要求用户可选择"Create PR"。
+- **后续联系**: Review Packet 视图的"Create PR"按钮触发此服务。
+
+### src/components/task/pr-create-dialog.tsx
+- **依赖**: src/kernel/delivery/pr-generator.ts, src/components/ui/card.tsx
+- **为什么这么做**: PR 创建确认对话框，展示生成的 PR 信息供用户确认。品牌原则"证据优先于描述"的交付环节体现。
+- **后续联系**: Review Packet 视图的"Create PR"按钮打开此对话框。
+
+### src/kernel/memory-governance/fact-governor.ts (增强)
+- **依赖**: src/kernel/review-packet/packet-generator.ts, src/kernel/project-brain/brain-service.ts
+- **为什么这么做**: 增强 Memory Update Proposal 生成逻辑，分析代码变更和执行结果，自动生成事实创建/更新/过期/拒绝提案。PRD 第 10 节要求"生成 memory update proposal"。
+- **后续联系**: Task Deliver Workflow 自动调用此增强方法。
+
+### src/components/task/memory-proposal-dialog.tsx
+- **依赖**: src/kernel/memory-governance/fact-governor.ts, src/components/ui/badge.tsx
+- **为什么这么做**: Memory Update Proposal 审查对话框，用户可逐条审查和接受/拒绝提案。品牌原则"记忆必须有证据和过期机制"的交互体现。
+- **后续联系**: 任务完成后自动弹出此对话框。
+
+### src/components/brain/memory-panel.tsx
+- **依赖**: src/store/project-store.ts, src/components/ui/badge.tsx, src/components/ui/card.tsx
+- **为什么这么做**: Brain Navigator Memory 标签页，展示项目记忆管理视图。PRD 第 8 节工作台设计明确列出 Memory 标签页。
+- **后续联系**: brain-navigator.tsx 的 Memory 标签页内容。
+
+### src/components/task/preview-panel.tsx
+- **依赖**: src/store/task-store.ts, src/components/ui/diff-view.tsx
+- **为什么这么做**: Task Workspace Preview 标签页，展示代码变更预览。PRD 第 8 节工作台设计明确列出 Preview 标签页。
+- **后续联系**: task-workspace.tsx 的 Preview 标签页内容。
+
+---
+
+## Phase 10: 编辑器与开发者运行时增强
+
+### src/kernel/lsp/symbol-provider.ts
+- **依赖**: src/kernel/lsp/lsp-bridge.ts, src/kernel/project-brain/api-extractor.ts
+- **为什么这么做**: 符号提取和索引，支持文件内符号列表和全项目符号搜索。PRD 第 7 节 Editor Layer 明确要求 Symbol Navigation。
+- **后续联系**: Monaco Editor 的 Ctrl+Shift+O 和 Ctrl+T 功能使用此服务。
+
+### src/components/editor/symbol-picker.tsx
+- **依赖**: src/kernel/lsp/symbol-provider.ts
+- **为什么这么做**: 符号选择器 UI，展示符号列表供用户选择跳转。标准 IDE 符号导航体验。
+- **后续联系**: Monaco Editor 触发符号导航时弹出此组件。
+
+### src/kernel/debug/debug-bridge.ts
+- **依赖**: 无（使用 Node.js inspector API）
+- **为什么这么做**: Debug Adapter Protocol Bridge，支持启动调试会话、设置断点、单步执行。PRD 第 7 节 Developer Runtime 明确要求 Debug Adapter Bridge。
+- **后续联系**: Debug Panel 和 Monaco Editor 断点功能使用此服务。
+
+### src/components/debug/debug-panel.tsx
+- **依赖**: src/store/debug-store.ts, src/components/ui/card.tsx
+- **为什么这么做**: 调试面板，展示变量、调用栈和断点列表。标准 IDE 调试体验。
+- **后续联系**: Evidence Console 的 Debug 标签页内容。
+
+### src/store/debug-store.ts
+- **依赖**: zustand, src/ipc/bridge.ts
+- **为什么这么做**: 调试状态管理，管理调试会话状态、断点列表、变量和调用栈。
+- **后续联系**: Debug Panel 和 Monaco Editor 断点功能消费此 store。
+
+### src/kernel/sandbox/sandbox-runner.ts
+- **依赖**: Docker API（dockerode）
+- **为什么这么做**: Sandbox Runner，支持 Docker 容器隔离执行和 DevContainer 集成。PRD 第 7 节 AgentForge Kernel 明确要求 Sandbox Runner，Developer Runtime 要求 DevContainer / Docker Adapter。
+- **后续联系**: Agent 在沙箱中执行命令时使用此服务。
+
+---
+
+## Phase 11: UX 优化与视觉完整性
+
+### src/kernel/workflow/task-classifier.ts
+- **依赖**: src/kernel/impact-guard/guard-engine.ts, src/kernel/project-brain/brain-service.ts
+- **为什么这么做**: 任务复杂度分类器，根据目标范围、涉及文件数、契约影响判断任务等级。PRD 第 20 节 Risk 5 要求"小任务自动走轻量路径"。
+- **后续联系**: Workflow Controller 使用分类结果决定执行路径。
+
+### src/components/hud/progressive-disclosure.tsx
+- **依赖**: src/store/task-store.ts
+- **为什么这么做**: 渐进披露容器组件，根据任务风险等级展示不同信息层级。PRD 第 20 节要求"UI 使用渐进披露"。
+- **后续联系**: Intelligence HUD 使用此组件包装各面板。
+
+### src/components/ui/stale-fact-badge.tsx
+- **依赖**: src/theme/tokens.ts
+- **为什么这么做**: Stale Fact Warning 组件，PRD 第 18 节视觉语言明确要求 Stale Fact warning。
+- **后续联系**: Brain Navigator 和 HUD 中的事实展示使用此组件。
+
+### src/components/ui/contract-lock-icon.tsx
+- **依赖**: src/theme/tokens.ts
+- **为什么这么做**: Contract Lock Icon 组件，PRD 第 18 节视觉语言明确要求 Contract lock icon。
+- **后续联系**: Contract List 中的契约展示使用此组件。
+
+### src/components/ui/intent-label.tsx
+- **依赖**: src/theme/tokens.ts
+- **为什么这么做**: Intent Diff Label 组件，PRD 第 18 节视觉语言明确要求 Intent Diff labels。
+- **后续联系**: Intent Diff Viewer 中的意图标注使用此组件。
+
+### src/components/ui/evidence-checkmark.tsx
+- **依赖**: src/theme/tokens.ts
+- **为什么这么做**: Evidence Checkmark 组件，PRD 第 18 节视觉语言明确要求 Evidence checkmarks。
+- **后续联系**: Evidence Stack Panel 中的验证状态展示使用此组件。
+
+---
+
+## Phase 12: 生产就绪
+
+### src/kernel/cache/lru-cache.ts
+- **依赖**: 无
+- **为什么这么做**: 通用 LRU 缓存实现，用于缓存 Project Brain 扫描结果、Impact Guard 分析结果等频繁查询数据。PRD 第 16 节非功能需求要求性能优化。
+- **后续联系**: BrainService、GuardEngine、GraphEngine 集成此缓存。
+
+### electron-builder 配置 (package.json build 字段)
+- **依赖**: electron-builder
+- **为什么这么做**: Electron 应用打包配置，支持 macOS/Windows/Linux 三平台分发。产品从开发环境到用户可安装应用的必要步骤。
+- **后续联系**: CI/CD 构建流水线使用此配置。
+
+### src/store/activity-store.ts
+- **依赖**: zustand, src/ipc/bridge.ts
+- **为什么这么做**: 活动事件状态管理，统一管理所有 agent 事件、任务状态变更、风险警告和系统通知。
+- **后续联系**: Activity Center 面板消费此 store。
+
+### src/components/activity/activity-center.tsx
+- **依赖**: src/store/activity-store.ts, src/components/ui/card.tsx
+- **为什么这么做**: Activity Center 活动中心面板，统一展示所有事件和通知。PRD 第 7 节 Native Workbench 的通知系统增强。
+- **后续联系**: Workbench Layout 中的铃铛图标入口。
+
+### src/kernel/plugin/plugin-registry.ts
+- **依赖**: 无
+- **为什么这么做**: 插件注册中心，管理自定义 analyzer、contract extractor、test selector 和 review policy 的注册。PRD 第 16 节非功能需求要求"支持多语言 analyzer 插件、自定义 contract extractor、自定义 test selector、自定义 review policy"。
+- **后续联系**: BrainService、GraphEngine 通过此注册中心调用插件。
+
+### src/kernel/plugin/plugin-loader.ts
+- **依赖**: src/kernel/plugin/plugin-registry.ts
+- **为什么这么做**: 插件加载器，从 .agentforge/plugins.json 配置文件加载插件。声明式插件注册，降低扩展门槛。
+- **后续联系**: 应用启动时调用此加载器初始化插件。

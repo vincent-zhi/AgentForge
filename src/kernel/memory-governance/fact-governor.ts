@@ -1,4 +1,4 @@
-import type { Evidence, MemoryUpdateProposal, FactStatus } from '@/types/core';
+import type { Evidence, MemoryUpdateProposal, FactStatus, ProjectFact, ImpactMap } from '@/types/core';
 import { ProjectFactRepository } from '../../db/repositories/project-fact-repo';
 
 const PROMOTION_EVIDENCE_SOURCES: Evidence['source'][] = ['code', 'test', 'pr', 'ci', 'human'];
@@ -75,6 +75,128 @@ export class FactGovernor {
     }
 
     return proposals;
+  }
+
+  generateUpdateProposals(
+    _taskId: string,
+    changedFiles: Array<{ path: string; intent: string; additions: number; deletions: number }>,
+    _impactMap: ImpactMap,
+  ): MemoryUpdateProposal[] {
+    const proposals: MemoryUpdateProposal[] = [];
+    const allFacts = this.factRepo.findAll(10000);
+
+    for (const changedFile of changedFiles) {
+      const isNewModule = changedFile.additions > 0 && changedFile.deletions === 0;
+      if (isNewModule) {
+        const moduleName = changedFile.path.split('/').slice(0, -1).join('/') || changedFile.path;
+        proposals.push({
+          action: 'create',
+          fact: {
+            type: 'module',
+            statement: `New module/pattern detected: ${changedFile.path}`,
+            scope: { modules: [moduleName] },
+            evidence: [{ source: 'code', files: [changedFile.path] }],
+            confidence: 'medium',
+            status: 'candidate',
+          },
+          reason: `New file with only additions detected (${changedFile.additions} lines), suggesting a new module or pattern`,
+        });
+      }
+    }
+
+    for (const fact of allFacts) {
+      if (fact.status !== 'active' && fact.status !== 'candidate') continue;
+
+      const affectedByChanges = changedFiles.some((cf) =>
+        fact.scope.modules.some((mod) => cf.path.startsWith(mod) || cf.path.includes(mod)),
+      );
+
+      if (affectedByChanges) {
+        const hasSignificantDeletions = changedFiles.some(
+          (cf) =>
+            fact.scope.modules.some((mod) => cf.path.startsWith(mod) || cf.path.includes(mod)) &&
+            cf.deletions > cf.additions,
+        );
+
+        if (hasSignificantDeletions) {
+          proposals.push({
+            factId: fact.id,
+            action: 'reject',
+            fact: { status: 'rejected' as FactStatus },
+            reason: `Fact contradicts new code patterns in ${changedFiles.find((cf) => fact.scope.modules.some((mod) => cf.path.startsWith(mod) || cf.path.includes(mod)))?.path || 'affected files'}`,
+          });
+        } else {
+          proposals.push({
+            factId: fact.id,
+            action: 'update',
+            fact: {
+              evidence: [
+                ...fact.evidence,
+                { source: 'code' as const, files: changedFiles.filter((cf) => fact.scope.modules.some((mod) => cf.path.startsWith(mod) || cf.path.includes(mod))).map((cf) => cf.path) },
+              ],
+              updatedAt: new Date().toISOString(),
+            },
+            reason: `Existing fact affected by code changes in scope: ${fact.scope.modules.join(', ')}`,
+          });
+        }
+      }
+    }
+
+    for (const fact of allFacts) {
+      if (fact.status !== 'active' && fact.status !== 'candidate') continue;
+
+      const evidenceFilesModified = fact.evidence.some((e) =>
+        e.files?.some((ef) => changedFiles.some((cf) => cf.path === ef)),
+      );
+
+      if (evidenceFilesModified) {
+        const alreadyProposed = proposals.some((p) => p.factId === fact.id);
+        if (!alreadyProposed) {
+          proposals.push({
+            factId: fact.id,
+            action: 'stale',
+            fact: { status: 'stale' as FactStatus },
+            reason: `Files referenced in fact evidence have been modified`,
+          });
+        }
+      }
+    }
+
+    return proposals;
+  }
+
+  applyProposal(proposal: MemoryUpdateProposal): void {
+    if (proposal.action === 'create') {
+      const newFact: ProjectFact = {
+        id: `fact_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+        type: proposal.fact.type || 'module',
+        statement: proposal.fact.statement || '',
+        scope: proposal.fact.scope || { modules: [] },
+        evidence: proposal.fact.evidence || [],
+        confidence: proposal.fact.confidence || 'low',
+        status: proposal.fact.status || 'candidate',
+        expiresWhen: proposal.fact.expiresWhen || [],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      this.factRepo.insert(newFact);
+    } else if (proposal.factId) {
+      if (proposal.action === 'update') {
+        if (proposal.fact.status) {
+          this.factRepo.updateStatus(proposal.factId, proposal.fact.status);
+        }
+        if (proposal.fact.confidence) {
+          this.factRepo.updateConfidence(proposal.factId, proposal.fact.confidence);
+        }
+      } else if (proposal.action === 'stale') {
+        this.factRepo.updateStatus(proposal.factId, 'stale');
+      } else if (proposal.action === 'reject') {
+        this.factRepo.updateStatus(proposal.factId, 'rejected');
+      }
+    }
+  }
+
+  rejectProposal(_proposalId: string): void {
   }
 
   private calculateConfidence(evidence: Evidence[]): 'low' | 'medium' | 'high' {

@@ -4,3 +4,7 @@ export { ReviewPacketView } from './review-packet-view';
 export { IntentDiffViewer } from './intent-diff-viewer';
 export { SafeApplyDialog } from './safe-apply-dialog';
 export { TaskHistory } from './task-history';
+export { PlanConfirmDialog } from './plan-confirm-dialog';
+export { ExecutionProgress } from './execution-progress';
+export type { StepInfo } from './execution-progress';
+export { MemoryProposalDialog } from './memory-proposal-dialog';

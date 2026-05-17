@@ -2,6 +2,7 @@ import React, { useState, useCallback } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { bridge } from '@/ipc/bridge';
 import { exportToMarkdown } from '@/kernel/review-packet/markdown-exporter';
+import { PrCreateDialog } from '@/components/task/pr-create-dialog';
 import type { ReviewPacket, VerificationResult, UnverifiedItem, MemoryUpdateProposal, RiskAssessment, ChangedFile } from '@/types/core';
 
 interface ReviewPacketViewProps {
@@ -46,6 +47,11 @@ const actionVariant: Record<string, 'verified' | 'partial' | 'unverified' | 'blo
 
 const ReviewPacketView: React.FC<ReviewPacketViewProps> = React.memo(({ packet }) => {
   const [toast, setToast] = useState<string | null>(null);
+  const [commitMessage, setCommitMessage] = useState<string | null>(null);
+  const [showCommitArea, setShowCommitArea] = useState(false);
+  const [prDialogInfo, setPrDialogInfo] = useState<{ title: string; body: string; labels: string[]; reviewers: string[] } | null>(null);
+  const [isGeneratingCommit, setIsGeneratingCommit] = useState(false);
+  const [isGeneratingPr, setIsGeneratingPr] = useState(false);
 
   const showToast = useCallback((message: string) => {
     setToast(message);
@@ -72,6 +78,50 @@ const ReviewPacketView: React.FC<ReviewPacketViewProps> = React.memo(({ packet }
       showToast('保存失败');
     }
   }, [packet, showToast]);
+
+  const handleGenerateCommit = useCallback(async () => {
+    setIsGeneratingCommit(true);
+    try {
+      const result = await bridge.delivery.generateCommit(packet.taskId) as unknown as string;
+      setCommitMessage(result);
+      setShowCommitArea(true);
+    } catch {
+      showToast('生成提交消息失败');
+    } finally {
+      setIsGeneratingCommit(false);
+    }
+  }, [packet.taskId, showToast]);
+
+  const handleCopyCommit = useCallback(async () => {
+    if (!commitMessage) return;
+    try {
+      await navigator.clipboard.writeText(commitMessage);
+      showToast('已复制提交消息');
+    } catch {
+      showToast('复制失败');
+    }
+  }, [commitMessage, showToast]);
+
+  const handleCreatePr = useCallback(async () => {
+    setIsGeneratingPr(true);
+    try {
+      const result = await bridge.delivery.generatePr(packet.taskId) as unknown as { title: string; body: string; labels: string[]; reviewers: string[] };
+      setPrDialogInfo(result);
+    } catch {
+      showToast('生成PR信息失败');
+    } finally {
+      setIsGeneratingPr(false);
+    }
+  }, [packet.taskId, showToast]);
+
+  const handlePrCreate = useCallback(async (_prInfo: { title: string; body: string; labels: string[]; reviewers: string[] }) => {
+    showToast('PR创建功能需要项目路径和分支名');
+    setPrDialogInfo(null);
+  }, [showToast]);
+
+  const handlePrCancel = useCallback(() => {
+    setPrDialogInfo(null);
+  }, []);
 
   return (
     <div className="space-y-4 relative">
@@ -235,6 +285,54 @@ const ReviewPacketView: React.FC<ReviewPacketViewProps> = React.memo(({ packet }
           <span>🚫</span>
           <span className="text-xs text-risk-red">Breaking changes detected</span>
         </div>
+      )}
+
+      <div className="flex items-center gap-2 pt-2 border-t border-forged-steel/20">
+        <button
+          onClick={handleGenerateCommit}
+          disabled={isGeneratingCommit}
+          className="px-2.5 py-1 text-xs rounded-sm bg-ember-orange/10 text-ember-orange border border-ember-orange/20 hover:bg-ember-orange/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {isGeneratingCommit ? 'Generating...' : 'Generate Commit'}
+        </button>
+        <button
+          onClick={handleCreatePr}
+          disabled={isGeneratingPr}
+          className="px-2.5 py-1 text-xs rounded-sm bg-forge-black/50 text-bright-steel border border-forged-steel/20 hover:bg-forged-steel/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {isGeneratingPr ? 'Generating...' : 'Create PR'}
+        </button>
+      </div>
+
+      {showCommitArea && commitMessage && (
+        <div>
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-xs text-forged-steel">Commit Message</span>
+            <button
+              onClick={handleCopyCommit}
+              className="px-2 py-0.5 text-[10px] rounded-sm bg-ember-orange/10 text-ember-orange border border-ember-orange/20 hover:bg-ember-orange/20 transition-colors"
+            >
+              Copy
+            </button>
+          </div>
+          <textarea
+            readOnly
+            value={commitMessage}
+            rows={6}
+            className="input-field text-xs font-mono resize-y"
+          />
+        </div>
+      )}
+
+      {prDialogInfo && (
+        <PrCreateDialog
+          title={prDialogInfo.title}
+          body={prDialogInfo.body}
+          labels={prDialogInfo.labels}
+          reviewers={prDialogInfo.reviewers}
+          onCreate={handlePrCreate}
+          onCancel={handlePrCancel}
+        />
       )}
     </div>
   );

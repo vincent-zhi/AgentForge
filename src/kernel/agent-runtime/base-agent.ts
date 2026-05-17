@@ -1,6 +1,7 @@
 import type { ContextLease, AgentRole } from '@/types/core';
 import type { Blackboard } from './blackboard';
 import type { LeaseManager } from '../context-lease/lease-manager';
+import type { ModelGateway } from '../model-gateway/model-gateway';
 
 export abstract class BaseAgent {
   id: string;
@@ -8,6 +9,7 @@ export abstract class BaseAgent {
   lease: ContextLease | null = null;
   protected blackboard: Blackboard;
   protected leaseManager: LeaseManager | null = null;
+  protected modelGateway: ModelGateway | null = null;
   protected taskId: string;
 
   constructor(id: string, role: AgentRole, taskId: string, blackboard: Blackboard, leaseManager?: LeaseManager) {
@@ -40,5 +42,33 @@ export abstract class BaseAgent {
 
   setLease(lease: ContextLease): void {
     this.lease = lease;
+  }
+
+  setModelGateway(gateway: ModelGateway): void {
+    this.modelGateway = gateway;
+  }
+
+  async executeWithTimeout(timeoutMs: number): Promise<void> {
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => reject(new Error(`Agent ${this.id} timed out after ${timeoutMs}ms`)), timeoutMs);
+    });
+    await Promise.race([this.execute(), timeoutPromise]);
+  }
+
+  async retryOnFailure(maxRetries: number): Promise<void> {
+    let lastError: Error | null = null;
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        await this.execute();
+        return;
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error(String(error));
+        if (attempt < maxRetries - 1) {
+          const delay = Math.pow(2, attempt) * 1000;
+          await new Promise((resolve) => setTimeout(resolve, delay));
+        }
+      }
+    }
+    throw lastError;
   }
 }

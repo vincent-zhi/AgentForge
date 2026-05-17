@@ -8,6 +8,7 @@ interface KeyboardShortcutCallbacks {
   onToggleEvidence: () => void;
   onFocusPanel: (panel: number) => void;
   onOpenSettings: () => void;
+  onToggleSearch: () => void;
 }
 
 export function useKeyboardShortcuts(callbacks: KeyboardShortcutCallbacks): void {
@@ -40,6 +41,9 @@ export function useKeyboardShortcuts(callbacks: KeyboardShortcutCallbacks): void
       } else if (e.ctrlKey && e.key === ',') {
         e.preventDefault();
         callbacks.onOpenSettings();
+      } else if (e.ctrlKey && e.shiftKey && e.key === 'F') {
+        e.preventDefault();
+        callbacks.onToggleSearch();
       }
     };
 

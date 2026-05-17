@@ -24,6 +24,7 @@ const App: React.FC = () => {
   const isInitialized = useProjectStore((s) => s.isInitialized);
   const openProject = useProjectStore((s) => s.openProject);
   const toggleEvidencePanel = useLayoutStore((s) => s.toggleEvidencePanel);
+  const toggleSearchPanel = useLayoutStore((s) => s.toggleSearchPanel);
   const setBrainPanelWidth = useLayoutStore((s) => s.setBrainPanelWidth);
   const brainPanelWidth = useLayoutStore((s) => s.brainPanelWidth);
 
@@ -71,7 +72,8 @@ const App: React.FC = () => {
     onToggleEvidence: toggleEvidencePanel,
     onFocusPanel: handleFocusPanel,
     onOpenSettings: handleOpenSettings,
-  }), [handleOpenProject, handleSubmitGoal, handleToggleBrain, toggleEvidencePanel, handleFocusPanel, handleOpenSettings]);
+    onToggleSearch: toggleSearchPanel,
+  }), [handleOpenProject, handleSubmitGoal, handleToggleBrain, toggleEvidencePanel, handleFocusPanel, handleOpenSettings, toggleSearchPanel]);
 
   useKeyboardShortcuts(keyboardCallbacks);
 

@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
 import { Badge } from '@/components/ui/badge';
+import { IntentLabel } from '@/components/ui/intent-label';
 import { DiffView } from '@/components/ui/diff-view';
 import type { IntentDiff, IntentType } from '@/types/core';
 
@@ -51,13 +52,19 @@ const IntentDiffViewer: React.FC<IntentDiffViewerProps> = React.memo(({ diffs })
             </div>
             <div className="space-y-2">
               {items.map((diff) => (
-                <DiffView
-                  key={diff.file}
-                  oldCode=""
-                  newCode={diff.hunks.map((h) => h.content).join('\n')}
-                  fileName={diff.file}
-                  intent={label}
-                />
+                <div key={diff.file}>
+                  <div className="flex items-center gap-2 mb-1">
+                    {diff.hunks.map((h, i) => (
+                      <IntentLabel key={i} intent={h.intent} />
+                    ))}
+                  </div>
+                  <DiffView
+                    oldCode=""
+                    newCode={diff.hunks.map((h) => h.content).join('\n')}
+                    fileName={diff.file}
+                    intent={label}
+                  />
+                </div>
               ))}
             </div>
           </div>

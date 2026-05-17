@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import type { ProjectScanResult } from '@/types/core';
+import type { ProjectScanResult, MonorepoType, TsconfigPathMapping, TsconfigReference } from '@/types/core';
 import { identifyModules } from './module-identifier';
 import { mapTests } from './test-mapper';
 import { markRisks } from './risk-marker';
@@ -76,6 +76,122 @@ function collectFiles(dir: string, basePath: string, results: string[]): void {
   }
 }
 
+function detectMonorepoType(rootPath: string): { type: MonorepoType; workspaces: string[] } {
+  if (fs.existsSync(path.join(rootPath, 'pnpm-workspace.yaml'))) {
+    const workspaces = parsePnpmWorkspaces(rootPath);
+    return { type: 'pnpm', workspaces };
+  }
+
+  if (fs.existsSync(path.join(rootPath, 'nx.json'))) {
+    const workspaces = parseNxWorkspaces(rootPath);
+    return { type: 'nx', workspaces };
+  }
+
+  if (fs.existsSync(path.join(rootPath, 'lerna.json'))) {
+    const workspaces = parseLernaWorkspaces(rootPath);
+    return { type: 'lerna', workspaces };
+  }
+
+  if (fs.existsSync(path.join(rootPath, 'turbo.json'))) {
+    const workspaces = parsePackageJsonWorkspaces(rootPath);
+    return { type: 'turborepo', workspaces };
+  }
+
+  const pkgWorkspaces = parsePackageJsonWorkspaces(rootPath);
+  if (pkgWorkspaces.length > 0) {
+    const lockFile = detectPackageManager(rootPath);
+    const type: MonorepoType = lockFile === 'yarn' ? 'yarn' : 'npm';
+    return { type, workspaces: pkgWorkspaces };
+  }
+
+  return { type: 'none', workspaces: [] };
+}
+
+function parsePnpmWorkspaces(rootPath: string): string[] {
+  const yamlPath = path.join(rootPath, 'pnpm-workspace.yaml');
+  try {
+    const content = fs.readFileSync(yamlPath, 'utf-8');
+    const packagesMatch = content.match(/packages:\s*\n((?:\s*-\s*.+\n?)+)/);
+    if (!packagesMatch) return [];
+    return packagesMatch[1]
+      .split('\n')
+      .map((line: string) => line.replace(/^\s*-\s*['"]?/, '').replace(/['"]?\s*$/, ''))
+      .filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+function parseNxWorkspaces(rootPath: string): string[] {
+  try {
+    const nxJsonPath = path.join(rootPath, 'nx.json');
+    if (!fs.existsSync(nxJsonPath)) return parsePackageJsonWorkspaces(rootPath);
+    return parsePackageJsonWorkspaces(rootPath);
+  } catch {
+    return [];
+  }
+}
+
+function parseLernaWorkspaces(rootPath: string): string[] {
+  try {
+    const lernaJsonPath = path.join(rootPath, 'lerna.json');
+    const content = fs.readFileSync(lernaJsonPath, 'utf-8');
+    const lerna = JSON.parse(content);
+    if (Array.isArray(lerna.packages)) return lerna.packages;
+    if (lerna.useWorkspaces) return parsePackageJsonWorkspaces(rootPath);
+    return [];
+  } catch {
+    return parsePackageJsonWorkspaces(rootPath);
+  }
+}
+
+function parsePackageJsonWorkspaces(rootPath: string): string[] {
+  const pkgJsonPath = path.join(rootPath, 'package.json');
+  if (!fs.existsSync(pkgJsonPath)) return [];
+  try {
+    const pkg = JSON.parse(fs.readFileSync(pkgJsonPath, 'utf-8'));
+    const workspaces = pkg.workspaces;
+    if (Array.isArray(workspaces)) return workspaces;
+    if (workspaces && Array.isArray(workspaces.packages)) return workspaces.packages;
+  } catch {}
+  return [];
+}
+
+function parseTsconfig(rootPath: string): { paths: TsconfigPathMapping[]; references: TsconfigReference[] } {
+  const tsconfigPath = path.join(rootPath, 'tsconfig.json');
+  if (!fs.existsSync(tsconfigPath)) return { paths: [], references: [] };
+
+  try {
+    const content = fs.readFileSync(tsconfigPath, 'utf-8');
+    const cleaned = content.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+    const tsconfig = JSON.parse(cleaned);
+
+    const pathMappings: TsconfigPathMapping[] = [];
+    const compilerPaths = tsconfig.compilerOptions?.paths;
+    if (compilerPaths && typeof compilerPaths === 'object') {
+      for (const [pattern, targetPaths] of Object.entries(compilerPaths)) {
+        if (Array.isArray(targetPaths)) {
+          pathMappings.push({ pattern, paths: targetPaths.filter((p): p is string => typeof p === 'string') });
+        }
+      }
+    }
+
+    const refs: TsconfigReference[] = [];
+    const references = tsconfig.references;
+    if (Array.isArray(references)) {
+      for (const ref of references) {
+        if (ref && typeof ref === 'object' && typeof ref.path === 'string') {
+          refs.push({ path: ref.path });
+        }
+      }
+    }
+
+    return { paths: pathMappings, references: refs };
+  } catch {
+    return { paths: [], references: [] };
+  }
+}
+
 export function scanProject(rootPath: string): ProjectScanResult {
   const files: string[] = [];
   collectFiles(rootPath, rootPath, files);
@@ -83,6 +199,8 @@ export function scanProject(rootPath: string): ProjectScanResult {
   const language = detectLanguage(rootPath);
   const framework = detectFramework(rootPath);
   const packageManager = detectPackageManager(rootPath);
+  const { type: monorepo, workspaces } = detectMonorepoType(rootPath);
+  const { paths: tsconfigPaths, references: tsconfigReferences } = parseTsconfig(rootPath);
 
   let name = path.basename(rootPath);
   const pkgJsonPath = path.join(rootPath, 'package.json');
@@ -109,5 +227,9 @@ export function scanProject(rootPath: string): ProjectScanResult {
     modules,
     testCommands,
     highRiskPaths,
+    monorepo: monorepo === 'none' ? undefined : monorepo,
+    workspaces: workspaces.length > 0 ? workspaces : undefined,
+    tsconfigPaths: tsconfigPaths.length > 0 ? tsconfigPaths : undefined,
+    tsconfigReferences: tsconfigReferences.length > 0 ? tsconfigReferences : undefined,
   };
 }

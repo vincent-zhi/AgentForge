@@ -1,5 +1,6 @@
 import type { ContextLease, AgentRole } from '@/types/core';
 import { checkReadPermission, checkWritePermission, checkFactPermission, checkToolPermission } from './permission-checker';
+import type { ProjectPolicy } from '../security/policy-manager';
 
 const ROLE_DEFAULTS: Record<AgentRole, { canRead: string[]; canWrite: string[]; canUseFacts: string[]; tools: string[]; requiresApprovalFor: string[] }> = {
   orchestrator: {
@@ -70,6 +71,11 @@ const ROLE_DEFAULTS: Record<AgentRole, { canRead: string[]; canWrite: string[]; 
 export class LeaseManager {
   private leases: Map<string, ContextLease> = new Map();
   private violations: Array<{ leaseId: string; action: string; target: string; timestamp: string }> = [];
+  private policy: ProjectPolicy | null = null;
+
+  setPolicy(policy: ProjectPolicy): void {
+    this.policy = policy;
+  }
 
   createLease(taskId: string, agentId: string, agentRole: AgentRole, capsule: { writable: string[]; readonly: string[]; forbidden: string[]; mustPreserve: import('@/types/core').ContractRef[] }): ContextLease {
     const defaults = ROLE_DEFAULTS[agentRole];
@@ -101,6 +107,34 @@ export class LeaseManager {
     if (new Date(lease.expiresAt) < new Date()) {
       lease.status = 'expired';
       return false;
+    }
+
+    if (this.policy) {
+      if (action === 'write' && this.policy.forbiddenPatterns.length > 0) {
+        const isForbidden = this.policy.forbiddenPatterns.some((pattern) => {
+          if (pattern === target) return true;
+          const regexStr = pattern
+            .replace(/\./g, '\\.')
+            .replace(/\*\*/g, '{{DOUBLESTAR}}')
+            .replace(/\*/g, '[^/]*')
+            .replace(/{{DOUBLESTAR}}/g, '.*');
+          try {
+            return new RegExp(`^${regexStr}$`).test(target);
+          } catch {
+            return pattern === target;
+          }
+        });
+        if (isForbidden) return false;
+      }
+
+      if (action === 'use_tool' && this.policy.commandWhitelist.length > 0) {
+        const baseCommand = target.trim().split(/\s+/)[0];
+        const isAllowed = this.policy.commandWhitelist.some((allowed) => {
+          if (allowed === baseCommand) return true;
+          return baseCommand.endsWith(`/${allowed}`);
+        });
+        if (!isAllowed) return false;
+      }
     }
 
     switch (action) {

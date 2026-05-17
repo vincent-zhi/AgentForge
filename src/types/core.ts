@@ -188,7 +188,7 @@ export interface EvidenceEntry {
   id: string;
   taskId: string;
   agentId: string;
-  type: 'command' | 'test' | 'git' | 'agent_log' | 'file_read' | 'file_write';
+  type: 'command' | 'test' | 'git' | 'agent_log' | 'file_read' | 'file_write' | 'sandbox';
   content: string;
   result?: string;
   timestamp: string;
@@ -225,6 +225,17 @@ export interface ModuleInfo {
   riskLevel: RiskLevel;
 }
 
+export type MonorepoType = 'pnpm' | 'nx' | 'lerna' | 'yarn' | 'npm' | 'turborepo' | 'none';
+
+export interface TsconfigPathMapping {
+  pattern: string;
+  paths: string[];
+}
+
+export interface TsconfigReference {
+  path: string;
+}
+
 export interface ProjectScanResult {
   rootPath: string;
   name: string;
@@ -234,4 +245,8 @@ export interface ProjectScanResult {
   modules: ModuleInfo[];
   testCommands: TestCommand[];
   highRiskPaths: string[];
+  monorepo?: MonorepoType;
+  workspaces?: string[];
+  tsconfigPaths?: TsconfigPathMapping[];
+  tsconfigReferences?: TsconfigReference[];
 }

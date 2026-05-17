@@ -31,7 +31,9 @@ export class TaskDeliverWorkflow {
 
     const safeApplyResult = this.runSafeApplyChecks(taskId, impactMap);
 
-    const memoryUpdates = this.generateMemoryUpdateProposals(taskId);
+    const changedFiles = this.extractChangedFiles(impactMap);
+
+    const memoryUpdates = this.generateMemoryUpdateProposals(taskId, changedFiles, impactMap);
 
     const suggestedPr = this.generatePrSuggestion(capsule.goal, impactMap);
 
@@ -112,8 +114,8 @@ export class TaskDeliverWorkflow {
     return { outOfScope, hasBreakingChange };
   }
 
-  private generateMemoryUpdateProposals(taskId: string): MemoryUpdateProposal[] {
-    return this.factGovernor.generateMemoryUpdateProposal(taskId);
+  private generateMemoryUpdateProposals(taskId: string, changedFiles: ChangedFile[], impactMap: ImpactMap): MemoryUpdateProposal[] {
+    return this.factGovernor.generateUpdateProposals(taskId, changedFiles, impactMap);
   }
 
   private generatePrSuggestion(goal: string, impactMap: ImpactMap): SuggestedPr {

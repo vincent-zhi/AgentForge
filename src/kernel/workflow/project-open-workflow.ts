@@ -24,7 +24,7 @@ export class ProjectOpenWorkflow {
 
     const dependencyGraph = buildDependencyGraph(rootPath, modules);
 
-    const contracts = this.graphEngine.buildGraph(rootPath, modules, dependencyGraph);
+    const contracts = await this.graphEngine.buildGraph(rootPath, modules, dependencyGraph.importMap);
 
     const apiExports = extractPublicApis(rootPath, modules);
 

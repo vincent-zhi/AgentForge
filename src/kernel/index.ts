@@ -12,13 +12,18 @@ import { TerminalManager } from './runtime/terminal-manager';
 import { GitManager } from './runtime/git-manager';
 import { TestRunner } from './runtime/test-runner';
 import { AuditLogger } from './security/audit-logger';
+import { WorktreeManager } from './runtime/worktree-manager';
 import { ProjectOpenWorkflow } from './workflow/project-open-workflow';
 import { TaskCreateWorkflow } from './workflow/task-create-workflow';
 import { TaskExecuteWorkflow } from './workflow/task-execute-workflow';
 import { TaskDeliverWorkflow } from './workflow/task-deliver-workflow';
 import { TaskCapsuleRepository } from '../db/repositories/task-capsule-repo';
+import { ImpactMapRepository } from '../db/repositories/impact-map-repo';
 import { generatePacket } from './review-packet/packet-generator';
 import { runSafeApplyChecks } from './safe-apply/apply-gate';
+import { WorkflowController } from './workflow/workflow-controller';
+import { PluginRegistry } from './plugin/plugin-registry';
+import { loadPlugins } from './plugin/plugin-loader';
 
 let brainService: BrainService;
 let graphEngine: GraphEngine;
@@ -33,18 +38,28 @@ let terminalManager: TerminalManager;
 let gitManager: GitManager;
 let testRunner: TestRunner;
 let auditLogger: AuditLogger;
+let worktreeManager: WorktreeManager;
 let projectOpenWorkflow: ProjectOpenWorkflow;
 let taskCreateWorkflow: TaskCreateWorkflow;
 let taskExecuteWorkflow: TaskExecuteWorkflow;
 let taskDeliverWorkflow: TaskDeliverWorkflow;
 let taskCapsuleRepo: TaskCapsuleRepository;
+let impactMapRepo: ImpactMapRepository;
+let workflowController: WorkflowController;
+let pluginRegistry: PluginRegistry;
 
 const packetGenerator = { generatePacket };
 const applyGate = { runSafeApplyChecks };
 
-export function initializeKernel(): void {
+export async function initializeKernel(projectPath?: string): Promise<void> {
   const db = getDatabase();
   runMigrations(db);
+
+  pluginRegistry = new PluginRegistry();
+
+  if (projectPath) {
+    await loadPlugins(projectPath, pluginRegistry);
+  }
 
   brainService = new BrainService();
   graphEngine = new GraphEngine();
@@ -59,16 +74,28 @@ export function initializeKernel(): void {
   testRunner = new TestRunner();
   auditLogger = new AuditLogger();
   taskCapsuleRepo = new TaskCapsuleRepository();
+  impactMapRepo = new ImpactMapRepository();
+
+  brainService.setPluginRegistry(pluginRegistry);
+  graphEngine.setPluginRegistry(pluginRegistry);
 
   capsuleCompiler.setGuardEngine(guardEngine);
   capsuleCompiler.setBrainService(brainService);
 
   agentRuntime = new AgentRuntime(undefined, leaseManager);
 
+  worktreeManager = new WorktreeManager(gitManager);
+
+  agentRuntime.setModelGateway(modelGateway);
+
   projectOpenWorkflow = new ProjectOpenWorkflow(brainService, graphEngine);
   taskCreateWorkflow = new TaskCreateWorkflow(capsuleCompiler, guardEngine, brainService);
   taskExecuteWorkflow = new TaskExecuteWorkflow(agentRuntime, leaseManager, evidencePipeline, guardEngine, auditLogger);
   taskDeliverWorkflow = new TaskDeliverWorkflow(guardEngine, factGovernor, auditLogger);
+  workflowController = new WorkflowController(
+    capsuleCompiler, guardEngine, agentRuntime, leaseManager,
+    evidencePipeline, taskCapsuleRepo, impactMapRepo,
+  );
 }
 
 export function shutdownKernel(): void {
@@ -89,11 +116,15 @@ export const kernelServices = {
   get gitManager() { return gitManager; },
   get testRunner() { return testRunner; },
   get auditLogger() { return auditLogger; },
+  get worktreeManager() { return worktreeManager; },
   get projectOpenWorkflow() { return projectOpenWorkflow; },
   get taskCreateWorkflow() { return taskCreateWorkflow; },
   get taskExecuteWorkflow() { return taskExecuteWorkflow; },
   get taskDeliverWorkflow() { return taskDeliverWorkflow; },
   get taskCapsuleRepo() { return taskCapsuleRepo; },
+  get impactMapRepo() { return impactMapRepo; },
+  get workflowController() { return workflowController; },
+  get pluginRegistry() { return pluginRegistry; },
   packetGenerator,
   applyGate,
 };
@@ -112,11 +143,15 @@ export {
   gitManager,
   testRunner,
   auditLogger,
+  worktreeManager,
   projectOpenWorkflow,
   taskCreateWorkflow,
   taskExecuteWorkflow,
   taskDeliverWorkflow,
   taskCapsuleRepo,
+  impactMapRepo,
+  workflowController,
+  pluginRegistry,
   packetGenerator,
   applyGate,
 };
@@ -134,9 +169,24 @@ export { TerminalManager } from './runtime/terminal-manager';
 export { GitManager } from './runtime/git-manager';
 export { TestRunner } from './runtime/test-runner';
 export { AuditLogger } from './security/audit-logger';
+export { WorktreeManager } from './runtime/worktree-manager';
 export { isSensitivePath, isHighRiskPath, checkFileAccess, SENSITIVE_PATTERNS, HIGH_RISK_PATTERNS } from './security/file-guard';
 export { classifyCommand } from './security/command-classifier';
 export { ProjectOpenWorkflow } from './workflow/project-open-workflow';
 export { TaskCreateWorkflow } from './workflow/task-create-workflow';
 export { TaskExecuteWorkflow } from './workflow/task-execute-workflow';
 export { TaskDeliverWorkflow } from './workflow/task-deliver-workflow';
+export { WorkflowController } from './workflow/workflow-controller';
+export type { WorkflowStep } from './workflow/workflow-controller';
+export { PackageManagerAdapter } from './runtime/package-manager';
+export type { PackageManagerType } from './runtime/package-manager';
+export { CIDetector } from './ci/ci-detector';
+export type { CIWorkflow } from './ci/ci-detector';
+export { ADRManager } from './project-brain/adr-manager';
+export type { ADR, ADRStatus } from './project-brain/adr-manager';
+export { PolicyManager } from './security/policy-manager';
+export type { ProjectPolicy } from './security/policy-manager';
+export { PluginRegistry } from './plugin/plugin-registry';
+export { loadPlugins } from './plugin/plugin-loader';
+export type { IAnalyzerPlugin, IContractExtractorPlugin, ITestSelectorPlugin, IReviewPolicyPlugin, PluginAnalysisResult, PluginContractResult, PluginTestResult, PluginReviewResult } from './plugin/plugin-registry';
+export type { PluginConfig } from './plugin/plugin-loader';

@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
 import { Badge } from '@/components/ui/badge';
+import { ContractLockIcon } from '@/components/ui/contract-lock-icon';
 import type { ContractRef, ContractType } from '@/types/core';
 
 interface ContractListProps {
@@ -75,6 +76,7 @@ const ContractList: React.FC<ContractListProps> = React.memo(({ contracts }) => 
                   key={c.id}
                   className="flex items-center gap-2 px-2 py-1.5 rounded-sm bg-forge-black/50 hover:bg-forge-black/80 transition-colors duration-fast"
                 >
+                  <ContractLockIcon isLocked={c.compatibility === 'must_preserve'} contractType={c.compatibility} />
                   <span className="text-sm text-bright-steel flex-1 truncate">{c.name}</span>
                   <span className="text-[10px] text-forged-steel truncate max-w-[80px]">{c.provider}</span>
                   <Badge variant="default" label={`${c.consumers.length}`} />

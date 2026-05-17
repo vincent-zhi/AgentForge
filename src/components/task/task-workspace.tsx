@@ -2,6 +2,8 @@ import React, { useState, useMemo, useCallback } from 'react';
 import { SpecView } from './spec-view';
 import { ReviewPacketView } from './review-packet-view';
 import { IntentDiffViewer } from './intent-diff-viewer';
+import { ExecutionProgress } from './execution-progress';
+import { PreviewPanel } from './preview-panel';
 import { EditorTabs, MonacoEditor } from '@/components/editor';
 import { useTaskStore, useEditorStore } from '@/store';
 
@@ -17,7 +19,7 @@ const taskTabs: { key: TaskTab; label: string }[] = [
 
 const TaskWorkspace: React.FC = React.memo(() => {
   const [activeTaskTab, setActiveTaskTab] = useState<TaskTab>('spec');
-  const { tasks, currentTaskId, reviewPacket } = useTaskStore();
+  const { tasks, currentTaskId, reviewPacket, currentStep } = useTaskStore();
   const { tabs: editorTabs, activeTabId, contents, setActiveTab: setEditorActiveTab, closeTab, saveFile, updateContent } = useEditorStore();
 
   const currentTask = useMemo(
@@ -72,6 +74,15 @@ const TaskWorkspace: React.FC = React.memo(() => {
           </div>
         ) : (
           <>
+            {currentTask.status === 'executing' && (
+              <div className="mb-4">
+                <ExecutionProgress
+                  currentStep={currentStep ?? ''}
+                  steps={[]}
+                />
+              </div>
+            )}
+
             {activeTaskTab === 'spec' && <SpecView task={currentTask} />}
 
             {activeTaskTab === 'editor' && (
@@ -114,13 +125,7 @@ const TaskWorkspace: React.FC = React.memo(() => {
               )
             )}
 
-            {activeTaskTab === 'preview' && (
-              <div className="flex flex-col items-center justify-center h-full text-forged-steel">
-                <span className="text-4xl mb-3">👁️</span>
-                <span className="text-sm">Preview</span>
-                <span className="text-xs mt-1">Live preview of changes will appear here</span>
-              </div>
-            )}
+            {activeTaskTab === 'preview' && <PreviewPanel />}
           </>
         )}
       </div>

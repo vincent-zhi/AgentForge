@@ -1,9 +1,29 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useEffect } from 'react';
 import { useProjectStore } from '@/store/project-store';
 import { bridge } from '@/ipc/bridge';
 
+function formatRelativeTime(isoString: string): string {
+  const now = Date.now();
+  const then = new Date(isoString).getTime();
+  const diffMs = now - then;
+  const diffSeconds = Math.floor(diffMs / 1000);
+  const diffMinutes = Math.floor(diffSeconds / 60);
+  const diffHours = Math.floor(diffMinutes / 60);
+  const diffDays = Math.floor(diffHours / 24);
+
+  if (diffSeconds < 60) return '刚刚';
+  if (diffMinutes < 60) return `${diffMinutes}分钟前`;
+  if (diffHours < 24) return `${diffHours}小时前`;
+  if (diffDays < 30) return `${diffDays}天前`;
+  return new Date(isoString).toLocaleDateString();
+}
+
 export const WelcomeScreen: React.FC = () => {
-  const { recentProjects, openProject } = useProjectStore();
+  const { recentProjects, openProject, removeRecentProject, loadRecentProjects } = useProjectStore();
+
+  useEffect(() => {
+    loadRecentProjects();
+  }, [loadRecentProjects]);
 
   const handleOpenProject = useCallback(async () => {
     try {
@@ -19,6 +39,11 @@ export const WelcomeScreen: React.FC = () => {
       await openProject(path);
     } catch {}
   }, [openProject]);
+
+  const handleRemoveRecent = useCallback((e: React.MouseEvent, path: string) => {
+    e.stopPropagation();
+    removeRecentProject(path);
+  }, [removeRecentProject]);
 
   return (
     <div className="h-full w-full flex flex-col items-center justify-center bg-forge-black text-bright-steel">
@@ -47,12 +72,25 @@ export const WelcomeScreen: React.FC = () => {
                     onClick={() => handleOpenRecent(project.path)}
                     className="w-full text-left px-3 py-2 rounded hover:bg-forged-steel/10 transition-colors flex items-center justify-between group"
                   >
-                    <span className="text-sm text-bright-steel group-hover:text-ember-orange transition-colors">
-                      {project.name}
-                    </span>
-                    <span className="text-xs text-gray truncate ml-4 max-w-[200px]">
-                      {project.path}
-                    </span>
+                    <div className="flex flex-col gap-0.5 min-w-0 flex-1">
+                      <span className="text-sm font-bold text-bright-steel group-hover:text-ember-orange transition-colors truncate">
+                        {project.name}
+                      </span>
+                      <span className="text-xs font-mono text-gray truncate">
+                        {project.path}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+                      <span className="text-xs text-gray">
+                        {formatRelativeTime(project.lastOpened)}
+                      </span>
+                      <span
+                        onClick={(e) => handleRemoveRecent(e, project.path)}
+                        className="text-gray hover:text-ember-orange transition-colors cursor-pointer text-sm px-1"
+                      >
+                        ✕
+                      </span>
+                    </div>
                   </button>
                 </li>
               ))}

@@ -1,6 +1,19 @@
 import { Menu, shell, dialog, app } from 'electron';
+import { SettingsService } from '../src/kernel/settings/settings-service';
 
 export function createApplicationMenu(mainWindow: Electron.BrowserWindow): void {
+  let settingsService: SettingsService | null = null;
+
+  async function getRecentProjects(): Promise<Array<{ path: string; name: string; lastOpened: string }>> {
+    try {
+      if (!settingsService) settingsService = new SettingsService();
+      const data = await settingsService.get('recentProjects');
+      return data ? JSON.parse(data) : [];
+    } catch {
+      return [];
+    }
+  }
+
   const template: Electron.MenuItemConstructorOptions[] = [
     {
       label: 'File',
@@ -9,6 +22,10 @@ export function createApplicationMenu(mainWindow: Electron.BrowserWindow): void 
           label: 'Open Project',
           accelerator: 'CmdOrCtrl+O',
           click: () => mainWindow.webContents.send('menu:openProject'),
+        },
+        {
+          label: 'Switch Project',
+          submenu: [],
         },
         {
           label: 'Settings',
@@ -122,4 +139,41 @@ export function createApplicationMenu(mainWindow: Electron.BrowserWindow): void 
 
   const menu = Menu.buildFromTemplate(template);
   Menu.setApplicationMenu(menu);
+
+  refreshRecentProjectsMenu(mainWindow);
+
+  mainWindow.on('focus', () => {
+    refreshRecentProjectsMenu(mainWindow);
+  });
+}
+
+function refreshRecentProjectsMenu(mainWindow: Electron.BrowserWindow): void {
+  const menu = Menu.getApplicationMenu();
+  if (!menu) return;
+
+  const fileMenu = menu.items.find((item) => item.label === 'File');
+  if (!fileMenu) return;
+
+  const switchProjectMenu = fileMenu.submenu?.items.find((item) => item.label === 'Switch Project');
+  if (!switchProjectMenu || !switchProjectMenu.submenu) return;
+
+  switchProjectMenu.submenu.clear();
+
+  const settingsService = new SettingsService();
+  settingsService.get('recentProjects').then((data) => {
+    const recentProjects: Array<{ path: string; name: string; lastOpened: string }> = data ? JSON.parse(data) : [];
+    const submenu = Menu.buildFromTemplate(
+      recentProjects.map((project) => ({
+        label: `${project.name} — ${project.path}`,
+        click: () => mainWindow.webContents.send('menu:switchProject', project.path),
+      }))
+    );
+
+    if (recentProjects.length === 0) {
+      submenu.append(new (require('electron').MenuItem)({ label: 'No Recent Projects', enabled: false }));
+    }
+
+    switchProjectMenu.submenu = submenu;
+    Menu.setApplicationMenu(menu);
+  }).catch(() => {});
 }

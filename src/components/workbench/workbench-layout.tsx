@@ -1,11 +1,14 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useState } from 'react';
 import { useLayoutStore } from '@/store/layout-store';
+import { useActivityStore } from '@/store/activity-store';
 import { GoalBar } from './goal-bar';
 import { PanelResizer } from './panel-resizer';
 import { BrainNavigator } from '@/components/brain/brain-navigator';
 import { TaskWorkspace } from '@/components/task/task-workspace';
 import { IntelligenceHud } from '@/components/hud/intelligence-hud';
 import { EvidenceConsole } from '@/components/evidence/evidence-console';
+import { SearchPanel } from '@/components/search';
+import { ActivityCenter } from '@/components/activity/activity-center';
 
 const BRAIN_MIN = 200;
 const BRAIN_MAX = 500;
@@ -15,16 +18,20 @@ const EVIDENCE_MIN = 100;
 const EVIDENCE_MAX = 500;
 
 export const WorkbenchLayout: React.FC = () => {
+  const [activityOpen, setActivityOpen] = useState(false);
   const {
     brainPanelWidth,
     hudPanelWidth,
     evidencePanelHeight,
     evidencePanelCollapsed,
+    searchPanelOpen,
     setBrainPanelWidth,
     setHudPanelWidth,
     setEvidencePanelHeight,
     toggleEvidencePanel,
   } = useLayoutStore();
+
+  const unreadCount = useActivityStore((s) => s.unreadCount);
 
   const handleBrainResize = useCallback(
     (delta: number) => {
@@ -54,7 +61,7 @@ export const WorkbenchLayout: React.FC = () => {
   );
 
   return (
-    <div className="h-full flex flex-col bg-forge-black">
+    <div className="h-full flex flex-col bg-forge-black relative">
       <GoalBar />
 
       <div className="flex-1 flex overflow-hidden">
@@ -69,8 +76,20 @@ export const WorkbenchLayout: React.FC = () => {
 
         <div className="flex-1 flex flex-col overflow-hidden">
           <div className="flex-1 flex overflow-hidden">
-            <div className="flex-1 bg-forge-black overflow-auto">
+            <div className="flex-1 bg-forge-black overflow-auto relative">
               <TaskWorkspace />
+              <button
+                onClick={() => setActivityOpen(!activityOpen)}
+                className="absolute top-3 right-3 z-panel text-forged-steel hover:text-bright-steel transition-colors p-1.5 rounded-md hover:bg-graphite"
+                title="活动中心"
+              >
+                🔔
+                {unreadCount > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-risk-red text-bright-steel text-[10px] font-bold rounded-full min-w-[16px] h-4 flex items-center justify-center px-1">
+                    {unreadCount > 99 ? '99+' : unreadCount}
+                  </span>
+                )}
+              </button>
             </div>
 
             <PanelResizer direction="horizontal" onResize={handleHudResize} minSize={HUD_MIN} maxSize={HUD_MAX} />
@@ -109,6 +128,14 @@ export const WorkbenchLayout: React.FC = () => {
           )}
         </div>
       </div>
+
+      {searchPanelOpen && (
+        <div className="absolute top-0 right-0 bottom-0 w-[400px] bg-graphite border-l border-forged-steel/20 z-overlay shadow-xl animate-slide-in-right">
+          <SearchPanel />
+        </div>
+      )}
+
+      <ActivityCenter open={activityOpen} onClose={() => setActivityOpen(false)} />
     </div>
   );
 };

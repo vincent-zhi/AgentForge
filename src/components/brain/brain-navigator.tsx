@@ -3,24 +3,33 @@ import { Badge } from '@/components/ui/badge';
 import { ModuleTree } from './module-tree';
 import { ContractList } from './contract-list';
 import { FactSearch } from './fact-search';
+import { FileExplorer } from './file-explorer';
+import { MemoryPanel } from './memory-panel';
+import { ADRDialog } from './adr-dialog';
 import { useProjectStore } from '@/store';
+import { bridge } from '@/ipc/bridge';
 import type { ContractRef } from '@/types/core';
+import type { ADR } from '@/kernel/project-brain/adr-manager';
 
-type BrainTab = 'overview' | 'modules' | 'contracts' | 'apis' | 'tests' | 'decisions' | 'search';
+type BrainTab = 'files' | 'overview' | 'modules' | 'contracts' | 'apis' | 'tests' | 'decisions' | 'memory' | 'search';
 
 const tabs: { key: BrainTab; label: string }[] = [
+  { key: 'files', label: 'Files' },
   { key: 'overview', label: 'Overview' },
   { key: 'modules', label: 'Modules' },
   { key: 'contracts', label: 'Contracts' },
   { key: 'apis', label: 'APIs' },
   { key: 'tests', label: 'Tests' },
   { key: 'decisions', label: 'Decisions' },
+  { key: 'memory', label: 'Memory' },
   { key: 'search', label: 'Search' },
 ];
 
 const BrainNavigator: React.FC = React.memo(() => {
-  const [activeTab, setActiveTab] = useState<BrainTab>('overview');
+  const [activeTab, setActiveTab] = useState<BrainTab>('files');
   const [selectedModule, setSelectedModule] = useState<string | undefined>();
+  const [adrDialogOpen, setAdrDialogOpen] = useState(false);
+  const [editingADR, setEditingADR] = useState<ADR | null>(null);
   const { scanResult, modules, facts } = useProjectStore();
 
   const contracts = useMemo<ContractRef[]>(() => {
@@ -68,6 +77,10 @@ const BrainNavigator: React.FC = React.memo(() => {
         ))}
       </div>
       <div className="flex-1 overflow-auto p-3">
+        {activeTab === 'files' && (
+          <FileExplorer />
+        )}
+
         {activeTab === 'overview' && (
           <div className="space-y-3">
             <div className="grid grid-cols-2 gap-2">
@@ -168,6 +181,15 @@ const BrainNavigator: React.FC = React.memo(() => {
 
         {activeTab === 'decisions' && (
           <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-forged-steel">Architecture Decisions</span>
+              <button
+                onClick={() => { setEditingADR(null); setAdrDialogOpen(true); }}
+                className="text-xs text-ember-orange hover:text-bright-steel transition-colors"
+              >
+                + New Decision
+              </button>
+            </div>
             {decisionFacts.length === 0 ? (
               <div className="text-xs text-forged-steel text-center py-6">
                 No architecture decisions recorded.
@@ -189,7 +211,21 @@ const BrainNavigator: React.FC = React.memo(() => {
                 </div>
               ))
             )}
+            <ADRDialog
+              open={adrDialogOpen}
+              onClose={() => setAdrDialogOpen(false)}
+              editADR={editingADR}
+              onSave={(data) => {
+                bridge.runtime.executeCommand(
+                  `agentforge-adr-create ${JSON.stringify(data)}`
+                ).catch(() => {});
+              }}
+            />
           </div>
+        )}
+
+        {activeTab === 'memory' && (
+          <MemoryPanel />
         )}
 
         {activeTab === 'search' && (
