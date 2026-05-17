@@ -51,8 +51,6 @@ export class WorkflowController {
     this.pipeline = pipeline;
     this.taskRepo = taskRepo;
     this.impactRepo = impactRepo;
-    void this._guardEngine;
-    void this._leaseManager;
   }
 
   setMainWindow(window: BrowserWindow): void {
@@ -83,7 +81,20 @@ export class WorkflowController {
       capsule.status = 'executing';
       this.taskRepo.insert(capsule);
 
+      this.setStep('analyzing_impact');
+      const target = {
+        module: capsule.affectedModules[0]?.name || capsule.writable[0] || '',
+        files: capsule.writable,
+      };
+      const impactAnalysis = this._guardEngine.analyzeImpact(this.currentTaskId, target);
+
       this.setStep('creating_leases');
+      this._leaseManager.createLease(
+        this.currentTaskId,
+        this.currentTaskId,
+        'coder',
+        { writable: capsule.writable, readonly: capsule.readonly, forbidden: capsule.forbidden, mustPreserve: capsule.mustPreserve },
+      );
 
       if (this.worktreeManager && this.projectPath) {
         try {
@@ -107,27 +118,17 @@ export class WorkflowController {
       this.setStep('collecting_evidence');
       this.setStep('generating_review');
       const evidence = this.pipeline.getEvidenceStack(this.currentTaskId);
-      const impactMap = this.impactRepo.findByTaskId(this.currentTaskId);
       const packet = generatePacket(
-        this.currentTaskId, capsule, impactMap || {
-          taskId: this.currentTaskId,
-          target: { module: '', files: [] },
-          upstreamDependencies: [],
-          downstreamDependents: [],
-          contractsTouched: [],
-          affectedTests: [],
-          forbiddenChanges: [],
-          risk: { level: 'low' as const, reasons: [] },
-          reviewFocus: [],
-          plannedImpactHash: '',
-        }, evidence,
+        this.currentTaskId, capsule, impactAnalysis, evidence,
         [], [],
       );
 
       this.setStep('checking_safe_apply');
-      const checks = runSafeApplyChecks(this.currentTaskId, packet);
+    const checks = runSafeApplyChecks(this.currentTaskId, packet);
 
-      this.updateTaskStatus(this.currentTaskId!, 'reviewing');
+    this.impactRepo.insert(impactAnalysis);
+
+    this.updateTaskStatus(this.currentTaskId!, 'reviewing');
       this.emitTaskStatus('reviewing');
       this.emitEvent('review_ready', { packet, checks });
 
@@ -171,7 +172,20 @@ export class WorkflowController {
     this.updateTaskStatus(taskId, 'executing');
     this.emitTaskStatus('executing');
 
+    this.setStep('analyzing_impact');
+    const target = {
+      module: capsule.affectedModules[0]?.name || capsule.writable[0] || '',
+      files: capsule.writable,
+    };
+    const impactAnalysis = this._guardEngine.analyzeImpact(taskId, target);
+
     this.setStep('creating_leases');
+    this._leaseManager.createLease(
+      taskId,
+      taskId,
+      'coder',
+      { writable: capsule.writable, readonly: capsule.readonly, forbidden: capsule.forbidden, mustPreserve: capsule.mustPreserve },
+    );
 
     if (this.worktreeManager && this.projectPath) {
       try {
@@ -196,20 +210,8 @@ export class WorkflowController {
 
     this.setStep('generating_review');
     const evidence = this.pipeline.getEvidenceStack(taskId);
-    const impactMap = this.impactRepo.findByTaskId(taskId);
     const packet = generatePacket(
-      taskId, capsule, impactMap || {
-        taskId,
-        target: { module: '', files: [] },
-        upstreamDependencies: [],
-        downstreamDependents: [],
-        contractsTouched: [],
-        affectedTests: [],
-        forbiddenChanges: [],
-        risk: { level: 'low' as const, reasons: [] },
-        reviewFocus: [],
-        plannedImpactHash: '',
-      }, evidence,
+      taskId, capsule, impactAnalysis, evidence,
       [], []
     );
 

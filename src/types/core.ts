@@ -5,7 +5,7 @@ export type RiskLevel = 'low' | 'medium' | 'high' | 'critical';
 export type LeaseStatus = 'active' | 'expired' | 'revoked';
 export type TaskStatus = 'draft' | 'planning' | 'executing' | 'reviewing' | 'completed' | 'failed' | 'cancelled';
 export type IntentType = 'business_fix' | 'compatibility' | 'test_coverage' | 'documentation' | 'refactor';
-export type ContractType = 'api' | 'type' | 'behavior' | 'ui' | 'data';
+export type ContractType = 'api' | 'type' | 'behavior' | 'ui' | 'data' | 'api_route' | 'type_export' | 'event_handler' | 'function_export' | 'class_export' | 'enum_export';
 export type CommandRisk = 'safe' | 'medium' | 'high';
 export type AgentRole = 'orchestrator' | 'architect' | 'impact' | 'contract' | 'search' | 'coder' | 'tester' | 'reviewer' | 'doc';
 
@@ -50,7 +50,9 @@ export interface ContractRef {
   name: string;
   provider: string;
   consumers: string[];
-  compatibility: 'must_preserve' | 'should_preserve' | 'flexible';
+  compatibility: 'must_preserve' | 'should_preserve' | 'flexible' | 'may_evolve' | 'internal';
+  signature?: string;
+  location?: { file: string; line: number };
 }
 
 export interface TestCommand {

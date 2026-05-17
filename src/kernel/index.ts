@@ -82,11 +82,17 @@ export async function initializeKernel(projectPath?: string): Promise<void> {
   capsuleCompiler.setGuardEngine(guardEngine);
   capsuleCompiler.setBrainService(brainService);
 
-  agentRuntime = new AgentRuntime(undefined, leaseManager);
+  agentRuntime = new AgentRuntime({
+    leaseManager,
+    modelGateway,
+    brainService,
+    guardEngine,
+    graphEngine,
+    testRunner,
+    projectPath: projectPath || '',
+  });
 
   worktreeManager = new WorktreeManager(gitManager);
-
-  agentRuntime.setModelGateway(modelGateway);
 
   projectOpenWorkflow = new ProjectOpenWorkflow(brainService, graphEngine);
   taskCreateWorkflow = new TaskCreateWorkflow(capsuleCompiler, guardEngine, brainService);

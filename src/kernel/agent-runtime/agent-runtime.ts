@@ -1,7 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
-import type { TaskCapsule, AgentRole, BlackboardEvent } from '@/types/core';
 import { Blackboard } from './blackboard';
-import { BaseAgent } from './base-agent';
 import { OrchestratorAgent } from './orchestrator';
 import { ArchitectAgent } from './architect-agent';
 import { ImpactAgent } from './impact-agent';
@@ -11,122 +9,148 @@ import { CoderAgent } from './coder-agent';
 import { TesterAgent } from './tester-agent';
 import { ReviewerAgent } from './reviewer-agent';
 import { DocAgent } from './doc-agent';
-import { LeaseManager } from '../context-lease/lease-manager';
+import type { LeaseManager } from '../context-lease/lease-manager';
 import type { ModelGateway } from '../model-gateway/model-gateway';
+import type { BrainService } from '../project-brain/brain-service';
+import type { GuardEngine } from '../impact-guard/guard-engine';
+import type { GraphEngine } from '../contract-graph/graph-engine';
+import type { TestRunner } from '../runtime/test-runner';
+import type { TaskCapsule } from '@/types/core';
 
-interface AgentInfo {
-  id: string;
-  role: AgentRole;
-  status: 'idle' | 'running' | 'completed' | 'failed';
+export interface AgentRuntimeDeps {
+  leaseManager: LeaseManager;
+  modelGateway: ModelGateway;
+  brainService: BrainService;
+  guardEngine: GuardEngine;
+  graphEngine: GraphEngine;
+  testRunner: TestRunner;
+  projectPath: string;
 }
-
-const AGENT_ROLES: AgentRole[] = ['orchestrator', 'architect', 'impact', 'contract', 'search', 'coder', 'tester', 'reviewer', 'doc'];
-
-const AGENT_CONSTRUCTORS: Record<AgentRole, new (id: string, taskId: string, blackboard: Blackboard, leaseManager?: LeaseManager) => BaseAgent> = {
-  orchestrator: OrchestratorAgent,
-  architect: ArchitectAgent,
-  impact: ImpactAgent,
-  contract: ContractAgent,
-  search: SearchAgent,
-  coder: CoderAgent,
-  tester: TesterAgent,
-  reviewer: ReviewerAgent,
-  doc: DocAgent,
-};
 
 export class AgentRuntime {
   private blackboard: Blackboard;
   private leaseManager: LeaseManager;
-  private modelGateway: ModelGateway | null = null;
-  private agents: Map<string, BaseAgent> = new Map();
-  private agentStatuses: Map<string, AgentInfo> = new Map();
-  private runningTasks: Map<string, boolean> = new Map();
+  private modelGateway: ModelGateway;
+  private brainService: BrainService;
+  private guardEngine: GuardEngine;
+  private graphEngine: GraphEngine;
+  private testRunner: TestRunner;
+  private projectPath: string;
+  private orchestrator: OrchestratorAgent | null = null;
 
-  constructor(blackboard?: Blackboard, leaseManager?: LeaseManager) {
-    this.blackboard = blackboard || new Blackboard();
-    this.leaseManager = leaseManager || new LeaseManager();
-  }
-
-  setModelGateway(gateway: ModelGateway): void {
-    this.modelGateway = gateway;
-  }
-
-  async startTask(capsule: TaskCapsule): Promise<void> {
-    this.runningTasks.set(capsule.id, true);
-
-    if (this.modelGateway) {
-      this.modelGateway.setCurrentTask(capsule.id);
-    }
-
-    const orchestratorId = `agent-orchestrator-${uuidv4().slice(0, 8)}`;
-    const orchestrator = new OrchestratorAgent(orchestratorId, capsule.id, this.blackboard, this.leaseManager);
-
-    const lease = this.leaseManager.createLease(capsule.id, orchestratorId, 'orchestrator', capsule);
-    orchestrator.setLease(lease);
-
-    if (this.modelGateway) {
-      orchestrator.setModelGateway(this.modelGateway);
-    }
-
-    this.agents.set(orchestratorId, orchestrator);
-    this.agentStatuses.set(orchestratorId, { id: orchestratorId, role: 'orchestrator', status: 'running' });
-
-    for (const role of AGENT_ROLES) {
-      if (role === 'orchestrator') continue;
-      const agentId = `agent-${role}-${uuidv4().slice(0, 8)}`;
-      const AgentClass = AGENT_CONSTRUCTORS[role];
-      const agent = new AgentClass(agentId, capsule.id, this.blackboard, this.leaseManager);
-      const agentLease = this.leaseManager.createLease(capsule.id, agentId, role, capsule);
-      agent.setLease(agentLease);
-      if (this.modelGateway) {
-        agent.setModelGateway(this.modelGateway);
-      }
-      this.agents.set(agentId, agent);
-      this.agentStatuses.set(agentId, { id: agentId, role, status: 'idle' });
-    }
-
-    orchestrator.setCapsule(capsule);
-
-    try {
-      await orchestrator.execute();
-      this.agentStatuses.set(orchestratorId, { id: orchestratorId, role: 'orchestrator', status: 'completed' });
-    } catch (error) {
-      this.agentStatuses.set(orchestratorId, { id: orchestratorId, role: 'orchestrator', status: 'failed' });
-      this.blackboard.publish({
-        type: 'agent_error',
-        agentId: orchestratorId,
-        taskId: capsule.id,
-        data: { error: error instanceof Error ? error.message : String(error) },
-      });
-    } finally {
-      this.runningTasks.set(capsule.id, false);
-      this.leaseManager.expireLeases(capsule.id);
-    }
-  }
-
-  stopTask(taskId: string): void {
-    this.runningTasks.set(taskId, false);
-    this.leaseManager.expireLeases(taskId);
-    for (const [agentId, info] of this.agentStatuses.entries()) {
-      if (info.status === 'running') {
-        this.agentStatuses.set(agentId, { ...info, status: 'failed' });
-      }
-    }
-  }
-
-  getStatus(_taskId: string): AgentInfo[] {
-    const agents: AgentInfo[] = [];
-    for (const info of this.agentStatuses.values()) {
-      agents.push(info);
-    }
-    return agents;
-  }
-
-  getTimeline(taskId: string): BlackboardEvent[] {
-    return this.blackboard.getEvents(taskId);
+  constructor(deps: AgentRuntimeDeps) {
+    this.blackboard = new Blackboard();
+    this.leaseManager = deps.leaseManager;
+    this.modelGateway = deps.modelGateway;
+    this.brainService = deps.brainService;
+    this.guardEngine = deps.guardEngine;
+    this.graphEngine = deps.graphEngine;
+    this.testRunner = deps.testRunner;
+    this.projectPath = deps.projectPath;
   }
 
   getBlackboard(): Blackboard {
     return this.blackboard;
+  }
+
+  async startTask(capsule: TaskCapsule): Promise<void> {
+    this.blackboard.clear();
+
+    const taskId = capsule.id;
+    const orchestrator = new OrchestratorAgent(
+      `agent_orch_${uuidv4().slice(0, 8)}`,
+      taskId,
+      this.blackboard,
+      this.leaseManager,
+    );
+    orchestrator.setCapsule(capsule);
+    orchestrator.setModelGateway(this.modelGateway);
+
+    const architect = new ArchitectAgent(
+      `agent_arch_${uuidv4().slice(0, 8)}`,
+      taskId,
+      this.blackboard,
+      this.leaseManager,
+    );
+    architect.setModelGateway(this.modelGateway);
+
+    const impact = new ImpactAgent(
+      `agent_impact_${uuidv4().slice(0, 8)}`,
+      taskId,
+      this.blackboard,
+      this.leaseManager,
+    );
+    impact.setModelGateway(this.modelGateway);
+    impact.setGuardEngine(this.guardEngine);
+
+    const contract = new ContractAgent(
+      `agent_contract_${uuidv4().slice(0, 8)}`,
+      taskId,
+      this.blackboard,
+      this.leaseManager,
+    );
+    contract.setModelGateway(this.modelGateway);
+    contract.setGraphEngine(this.graphEngine);
+
+    const search = new SearchAgent(
+      `agent_search_${uuidv4().slice(0, 8)}`,
+      taskId,
+      this.blackboard,
+      this.leaseManager,
+    );
+    search.setModelGateway(this.modelGateway);
+    search.setBrainService(this.brainService);
+
+    const coder = new CoderAgent(
+      `agent_coder_${uuidv4().slice(0, 8)}`,
+      taskId,
+      this.blackboard,
+      this.leaseManager,
+    );
+    coder.setModelGateway(this.modelGateway);
+
+    const tester = new TesterAgent(
+      `agent_tester_${uuidv4().slice(0, 8)}`,
+      taskId,
+      this.blackboard,
+      this.leaseManager,
+    );
+    tester.setModelGateway(this.modelGateway);
+    tester.setTestRunner(this.testRunner);
+    tester.setProjectPath(this.projectPath);
+
+    const reviewer = new ReviewerAgent(
+      `agent_reviewer_${uuidv4().slice(0, 8)}`,
+      taskId,
+      this.blackboard,
+      this.leaseManager,
+    );
+    reviewer.setModelGateway(this.modelGateway);
+
+    const doc = new DocAgent(
+      `agent_doc_${uuidv4().slice(0, 8)}`,
+      taskId,
+      this.blackboard,
+      this.leaseManager,
+    );
+    doc.setModelGateway(this.modelGateway);
+
+    orchestrator.registerAgent('architect', architect, [], 'task_started');
+    orchestrator.registerAgent('impact', impact, ['architect'], 'spec_generated');
+    orchestrator.registerAgent('contract', contract, ['impact'], 'impact_map_generated');
+    orchestrator.registerAgent('search', search, ['architect'], 'spec_generated');
+    orchestrator.registerAgent('coder', coder, ['search', 'contract'], 'context_retrieved');
+    orchestrator.registerAgent('tester', tester, ['coder'], 'code_modified');
+    orchestrator.registerAgent('reviewer', reviewer, ['coder', 'tester'], 'test_completed');
+    orchestrator.registerAgent('doc', doc, ['reviewer'], 'review_completed');
+
+    this.orchestrator = orchestrator;
+
+    await this.orchestrator.execute();
+  }
+
+  async stopTask(): Promise<void> {
+    this.blackboard.clear();
+    this.orchestrator = null;
   }
 }

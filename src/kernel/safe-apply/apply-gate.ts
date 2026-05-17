@@ -1,4 +1,5 @@
 import type { ReviewPacket } from '@/types/core';
+import type { WorktreeManager } from '../runtime/worktree-manager';
 
 export interface SafeApplyCheck {
   check: string;
@@ -45,11 +46,29 @@ function checkContractsVerified(packet: ReviewPacket): SafeApplyCheck {
   };
 }
 
-function checkWorktreeIsolated(): SafeApplyCheck {
+function checkWorktreeIsolated(taskId: string, worktreeManager?: WorktreeManager): SafeApplyCheck {
+  if (!worktreeManager) {
+    return {
+      check: 'Worktree isolated',
+      passed: true,
+      details: 'Worktree isolation not configured (running in main tree)',
+    };
+  }
+
+  const activeWorktree = worktreeManager.getActiveWorktree(taskId);
+
+  if (activeWorktree) {
+    return {
+      check: 'Worktree isolated',
+      passed: true,
+      details: `Task is isolated in worktree: ${activeWorktree.path} (branch: ${activeWorktree.branch})`,
+    };
+  }
+
   return {
     check: 'Worktree isolated',
-    passed: true,
-    details: 'Worktree isolation verified (placeholder)',
+    passed: false,
+    details: 'No isolated worktree found for this task. Changes will apply directly to the main working tree.',
   };
 }
 
@@ -134,11 +153,11 @@ function checkNoOutOfScope(packet: ReviewPacket): SafeApplyCheck {
   };
 }
 
-export function runSafeApplyChecks(_taskId: string, packet: ReviewPacket): SafeApplyCheck[] {
+export function runSafeApplyChecks(taskId: string, packet: ReviewPacket, worktreeManager?: WorktreeManager): SafeApplyCheck[] {
   return [
     checkImpactMapGenerated(packet),
     checkContractsVerified(packet),
-    checkWorktreeIsolated(),
+    checkWorktreeIsolated(taskId, worktreeManager),
     checkTestsPassed(packet),
     checkNoUnverifiedItems(packet),
     checkNoHighRiskPaths(packet),

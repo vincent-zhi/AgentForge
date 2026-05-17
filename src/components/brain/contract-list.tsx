@@ -7,7 +7,7 @@ interface ContractListProps {
   contracts: ContractRef[];
 }
 
-const typeOrder: ContractType[] = ['api', 'type', 'behavior', 'ui', 'data'];
+const typeOrder: ContractType[] = ['api', 'type', 'behavior', 'ui', 'data', 'api_route', 'type_export', 'event_handler', 'function_export', 'class_export', 'enum_export'];
 
 const typeLabels: Record<ContractType, string> = {
   api: 'API',
@@ -15,6 +15,12 @@ const typeLabels: Record<ContractType, string> = {
   behavior: 'Behavior',
   ui: 'UI',
   data: 'Data',
+  api_route: 'API Route',
+  type_export: 'Type Export',
+  event_handler: 'Event Handler',
+  function_export: 'Function Export',
+  class_export: 'Class Export',
+  enum_export: 'Enum Export',
 };
 
 const typeBadgeVariant: Record<ContractType, 'analyzing' | 'brain' | 'partial' | 'ember' | 'default'> = {
@@ -23,6 +29,12 @@ const typeBadgeVariant: Record<ContractType, 'analyzing' | 'brain' | 'partial' |
   behavior: 'partial',
   ui: 'ember',
   data: 'default',
+  api_route: 'analyzing',
+  type_export: 'brain',
+  event_handler: 'partial',
+  function_export: 'ember',
+  class_export: 'default',
+  enum_export: 'brain',
 };
 
 const compatBadgeVariant: Record<string, 'blocked' | 'partial' | 'verified'> = {

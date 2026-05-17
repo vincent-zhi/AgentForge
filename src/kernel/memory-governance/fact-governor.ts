@@ -4,8 +4,11 @@ import { ProjectFactRepository } from '../../db/repositories/project-fact-repo';
 const PROMOTION_EVIDENCE_SOURCES: Evidence['source'][] = ['code', 'test', 'pr', 'ci', 'human'];
 const CANDIDATE_ONLY_SOURCES: Evidence['source'][] = ['agent_inference'];
 
+type StoredProposal = MemoryUpdateProposal & { id: string; proposalStatus: 'pending' | 'approved' | 'rejected' };
+
 export class FactGovernor {
   private factRepo: ProjectFactRepository;
+  private proposals: StoredProposal[] = [];
 
   constructor(factRepo?: ProjectFactRepository) {
     this.factRepo = factRepo || new ProjectFactRepository();
@@ -72,6 +75,15 @@ export class FactGovernor {
         fact: { status: 'stale' as FactStatus },
         reason: 'Fact is stale and needs revalidation',
       });
+    }
+
+    for (const proposal of proposals) {
+      const stored: StoredProposal = {
+        ...proposal,
+        id: `prop_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+        proposalStatus: 'pending',
+      };
+      this.proposals.push(stored);
     }
 
     return proposals;
@@ -162,6 +174,15 @@ export class FactGovernor {
       }
     }
 
+    for (const proposal of proposals) {
+      const stored: StoredProposal = {
+        ...proposal,
+        id: `prop_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+        proposalStatus: 'pending',
+      };
+      this.proposals.push(stored);
+    }
+
     return proposals;
   }
 
@@ -196,7 +217,19 @@ export class FactGovernor {
     }
   }
 
-  rejectProposal(_proposalId: string): void {
+  rejectProposal(proposalId: string): boolean {
+    const proposal = this.proposals.find((p) => p.id === proposalId);
+    if (!proposal) return false;
+
+    proposal.proposalStatus = 'rejected';
+
+    if (proposal.action === 'create') {
+      // Fact was never created, nothing to undo
+    } else {
+      // For update/stale/reject proposals, keep the current fact unchanged
+    }
+
+    return true;
   }
 
   private calculateConfidence(evidence: Evidence[]): 'low' | 'medium' | 'high' {

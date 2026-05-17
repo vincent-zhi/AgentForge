@@ -20,7 +20,15 @@ export class TaskExecuteWorkflow {
     auditLogger?: AuditLogger,
   ) {
     this.leaseManager = leaseManager || new LeaseManager();
-    this.agentRuntime = agentRuntime || new AgentRuntime(undefined, this.leaseManager);
+    this.agentRuntime = agentRuntime || new AgentRuntime({
+      leaseManager: this.leaseManager,
+      modelGateway: new (require('../model-gateway/model-gateway').ModelGateway)(),
+      brainService: new (require('../project-brain/brain-service').BrainService)(),
+      guardEngine: new GuardEngine(),
+      graphEngine: new (require('../contract-graph/graph-engine').GraphEngine)(),
+      testRunner: new (require('../runtime/test-runner').TestRunner)(),
+      projectPath: '',
+    });
     this.evidencePipeline = evidencePipeline || new EvidencePipeline();
     this.guardEngine = guardEngine || new GuardEngine();
     this.auditLogger = auditLogger || new AuditLogger();

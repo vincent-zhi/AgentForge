@@ -1,4 +1,4 @@
-import type { ContextLease, AgentRole } from '@/types/core';
+import type { ContextLease, AgentRole, BlackboardEvent } from '@/types/core';
 import type { Blackboard } from './blackboard';
 import type { LeaseManager } from '../context-lease/lease-manager';
 import type { ModelGateway } from '../model-gateway/model-gateway';
@@ -11,6 +11,7 @@ export abstract class BaseAgent {
   protected leaseManager: LeaseManager | null = null;
   protected modelGateway: ModelGateway | null = null;
   protected taskId: string;
+  private subscriptions: Array<() => void> = [];
 
   constructor(id: string, role: AgentRole, taskId: string, blackboard: Blackboard, leaseManager?: LeaseManager) {
     this.id = id;
@@ -29,6 +30,55 @@ export abstract class BaseAgent {
       taskId: this.taskId,
       data,
     });
+  }
+
+  protected subscribeToEvent(eventType: string, handler: (event: BlackboardEvent) => void): void {
+    const unsubscribe = this.blackboard.subscribe(eventType, (event) => {
+      if (event.taskId === this.taskId) {
+        handler(event);
+      }
+    });
+    this.subscriptions.push(unsubscribe);
+  }
+
+  protected waitForEvent(eventType: string, timeoutMs: number = 30000): Promise<BlackboardEvent | null> {
+    return new Promise((resolve) => {
+      const existing = this.blackboard.getEvents(this.taskId).find((e) => e.type === eventType);
+      if (existing) {
+        resolve(existing);
+        return;
+      }
+
+      const unsubscribe = this.blackboard.subscribe(eventType, (event) => {
+        if (event.taskId === this.taskId) {
+          clearTimeout(timer);
+          cleanup();
+          resolve(event);
+        }
+      });
+
+      const timer = setTimeout(() => {
+        cleanup();
+        resolve(null);
+      }, timeoutMs);
+
+      const cleanup = () => {
+        unsubscribe();
+        const idx = this.subscriptions.indexOf(unsubscribe);
+        if (idx >= 0) this.subscriptions.splice(idx, 1);
+      };
+
+      this.subscriptions.push(unsubscribe);
+    });
+  }
+
+  protected getLatestEvent(eventType: string): BlackboardEvent | null {
+    const events = this.blackboard.getEvents(this.taskId).filter((e) => e.type === eventType);
+    return events.length > 0 ? events[events.length - 1] : null;
+  }
+
+  protected getEventsByType(eventType: string): BlackboardEvent[] {
+    return this.blackboard.getEvents(this.taskId).filter((e) => e.type === eventType);
   }
 
   protected checkPermission(action: string, target: string): boolean {
@@ -70,5 +120,12 @@ export abstract class BaseAgent {
       }
     }
     throw lastError;
+  }
+
+  cleanup(): void {
+    for (const unsubscribe of this.subscriptions) {
+      unsubscribe();
+    }
+    this.subscriptions = [];
   }
 }
