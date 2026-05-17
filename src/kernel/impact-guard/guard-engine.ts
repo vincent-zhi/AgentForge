@@ -79,6 +79,10 @@ export class GuardEngine {
     return impactMap;
   }
 
+  getImpactMap(taskId: string): ImpactMap | null {
+    return this.impactMaps.get(taskId) || this.impactMapRepo.findByTaskId(taskId);
+  }
+
   comparePlannedVsActual(taskId: string): { match: boolean; differences: string[] } {
     const planned = this.impactMaps.get(taskId) || this.impactMapRepo.findByTaskId(taskId);
     if (!planned) {

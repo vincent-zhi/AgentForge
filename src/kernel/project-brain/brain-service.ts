@@ -1,22 +1,42 @@
 import { v4 as uuidv4 } from 'uuid';
+import type { BrowserWindow } from 'electron';
 import type { ProjectScanResult, ProjectFact, FactStatus, FactType, Confidence } from '@/types/core';
 import { ProjectFactRepository } from '../../db/repositories/project-fact-repo';
 import { scanProject } from './scanner';
 import { buildDependencyGraph } from './dependency-graph';
 import { extractPublicApis } from './api-extractor';
+import { FileWatcher } from './file-watcher';
+import { EVENT_CHANNELS } from '@/ipc/event-channels';
 
 export class BrainService {
   private factRepo: ProjectFactRepository;
   private scanResult: ProjectScanResult | null = null;
   private dependencyGraph: Map<string, string[]> | null = null;
+  private mainWindow: BrowserWindow | null = null;
+  private watcher: FileWatcher = new FileWatcher();
 
   constructor(factRepo?: ProjectFactRepository) {
     this.factRepo = factRepo || new ProjectFactRepository();
   }
 
+  setMainWindow(window: BrowserWindow): void {
+    this.mainWindow = window;
+  }
+
+  private sendScanProgress(data: { phase: string; progress: number; scanning: boolean }): void {
+    if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+      this.mainWindow.webContents.send(EVENT_CHANNELS.SCAN_PROGRESS, data);
+    }
+  }
+
   async initializeProject(rootPath: string): Promise<ProjectScanResult> {
+    this.sendScanProgress({ phase: 'scanning', progress: 0, scanning: true });
+
     this.scanResult = scanProject(rootPath);
+    this.sendScanProgress({ phase: 'scanning', progress: 25, scanning: true });
+
     this.dependencyGraph = buildDependencyGraph(rootPath, this.scanResult.modules);
+    this.sendScanProgress({ phase: 'dependency-graph', progress: 50, scanning: true });
 
     const apiExports = extractPublicApis(rootPath, this.scanResult.modules);
     for (const api of apiExports) {
@@ -32,6 +52,7 @@ export class BrainService {
         });
       }
     }
+    this.sendScanProgress({ phase: 'api-extraction', progress: 65, scanning: true });
 
     for (const mod of this.scanResult.modules) {
       this.addFact({
@@ -44,6 +65,7 @@ export class BrainService {
         expiresWhen: [{ type: 'file_change', value: mod.path }],
       });
     }
+    this.sendScanProgress({ phase: 'module-facts', progress: 80, scanning: true });
 
     for (const testCmd of this.scanResult.testCommands) {
       this.addFact({
@@ -67,6 +89,12 @@ export class BrainService {
         status: 'active',
         expiresWhen: [{ type: 'file_change', value: riskPath }],
       });
+    }
+    this.sendScanProgress({ phase: 'complete', progress: 100, scanning: false });
+
+    if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+      this.watcher.setMarkStaleCallback((filePath: string) => this.markStaleFacts(filePath));
+      this.watcher.start(rootPath, this.mainWindow);
     }
 
     return this.scanResult;
@@ -113,7 +141,15 @@ export class BrainService {
     return this.scanResult;
   }
 
+  getModules(): import('@/types/core').ModuleInfo[] {
+    return this.scanResult?.modules ?? [];
+  }
+
   getDependencyGraph(): Map<string, string[]> | null {
     return this.dependencyGraph;
+  }
+
+  stopWatching(): void {
+    this.watcher.stop();
   }
 }

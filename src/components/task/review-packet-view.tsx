@@ -1,5 +1,7 @@
-import React from 'react';
+import React, { useState, useCallback } from 'react';
 import { Badge } from '@/components/ui/badge';
+import { bridge } from '@/ipc/bridge';
+import { exportToMarkdown } from '@/kernel/review-packet/markdown-exporter';
 import type { ReviewPacket, VerificationResult, UnverifiedItem, MemoryUpdateProposal, RiskAssessment, ChangedFile } from '@/types/core';
 
 interface ReviewPacketViewProps {
@@ -43,8 +45,55 @@ const actionVariant: Record<string, 'verified' | 'partial' | 'unverified' | 'blo
 };
 
 const ReviewPacketView: React.FC<ReviewPacketViewProps> = React.memo(({ packet }) => {
+  const [toast, setToast] = useState<string | null>(null);
+
+  const showToast = useCallback((message: string) => {
+    setToast(message);
+    setTimeout(() => setToast(null), 2000);
+  }, []);
+
+  const handleCopyMarkdown = useCallback(async () => {
+    const md = exportToMarkdown(packet);
+    try {
+      await navigator.clipboard.writeText(md);
+      showToast('已复制到剪贴板');
+    } catch {
+      showToast('复制失败');
+    }
+  }, [packet, showToast]);
+
+  const handleSaveToFile = useCallback(async () => {
+    const md = exportToMarkdown(packet);
+    const filePath = `review-packet-${packet.taskId}.md`;
+    try {
+      await bridge.file.write(filePath, md);
+      showToast(`已保存到 ${filePath}`);
+    } catch {
+      showToast('保存失败');
+    }
+  }, [packet, showToast]);
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 relative">
+      {toast && (
+        <div className="absolute top-0 right-0 z-50 px-3 py-1.5 rounded-md bg-ember-orange/20 text-ember-orange text-xs border border-ember-orange/30">
+          {toast}
+        </div>
+      )}
+      <div className="flex items-center gap-2">
+        <button
+          onClick={handleCopyMarkdown}
+          className="px-2.5 py-1 text-xs rounded-sm bg-ember-orange/10 text-ember-orange border border-ember-orange/20 hover:bg-ember-orange/20 transition-colors"
+        >
+          Copy Markdown
+        </button>
+        <button
+          onClick={handleSaveToFile}
+          className="px-2.5 py-1 text-xs rounded-sm bg-forge-black/50 text-bright-steel border border-forged-steel/20 hover:bg-forged-steel/20 transition-colors"
+        >
+          Save to File
+        </button>
+      </div>
       <div className="flex items-center gap-2">
         <span className="text-sm text-forged-steel">Result:</span>
         <Badge variant={resultVariant[packet.result]} label={packet.result.toUpperCase()} />

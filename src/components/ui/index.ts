@@ -22,3 +22,5 @@ export type { IconButtonVariant, IconButtonSize } from './icon-button';
 
 export { Chip } from './chip';
 export type { ChipVariant, ChipSize } from './chip';
+
+export { ToastContainer } from './toast';

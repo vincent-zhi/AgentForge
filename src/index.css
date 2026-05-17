@@ -119,3 +119,18 @@
     @apply px-4 py-2 text-text-gray hover:text-bright-steel hover:bg-graphite rounded-md transition-colors duration-normal;
   }
 }
+
+@keyframes slide-in-right {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.animate-slide-in-right {
+  animation: slide-in-right 200ms ease-out;
+}

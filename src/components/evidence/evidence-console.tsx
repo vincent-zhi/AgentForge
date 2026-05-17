@@ -1,6 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { TestResultsPanel } from './test-results-panel';
+import { WorktreePanel } from './worktree-panel';
+import { TerminalInstance } from '@/components/terminal';
 import { useAgentStore } from '@/store';
 import type { EvidenceEntry } from '@/types/core';
 
@@ -57,10 +59,8 @@ const EvidenceConsole: React.FC = React.memo(() => {
       </div>
       <div className="flex-1 overflow-auto p-2 font-mono text-xs">
         {activeTab === 'terminal' && (
-          <div className="flex flex-col items-center justify-center h-full text-forged-steel">
-            <span className="text-2xl mb-2">🖥️</span>
-            <span className="text-xs">Terminal - Coming Soon</span>
-            <span className="text-[10px] mt-1">xterm.js integration will be available here</span>
+          <div className="h-full w-full">
+            <TerminalInstance />
           </div>
         )}
 
@@ -84,20 +84,23 @@ const EvidenceConsole: React.FC = React.memo(() => {
         )}
 
         {activeTab === 'git' && (
-          <div className="space-y-1">
-            {gitEntries.length === 0 ? (
-              <div className="text-xs text-forged-steel text-center py-4">
-                No git activity yet.
-              </div>
-            ) : (
-              gitEntries.map((e: EvidenceEntry) => (
-                <div key={e.id} className="flex items-start gap-2 px-1 py-0.5">
-                  <Badge variant="partial" label="git" />
-                  <span className="text-text-gray flex-1">{e.content}</span>
-                  {e.result && <Badge variant="verified" label={e.result} />}
+          <div className="space-y-3">
+            <div className="space-y-1">
+              {gitEntries.length === 0 ? (
+                <div className="text-xs text-forged-steel text-center py-4">
+                  No git activity yet.
                 </div>
-              ))
-            )}
+              ) : (
+                gitEntries.map((e: EvidenceEntry) => (
+                  <div key={e.id} className="flex items-start gap-2 px-1 py-0.5">
+                    <Badge variant="partial" label="git" />
+                    <span className="text-text-gray flex-1">{e.content}</span>
+                    {e.result && <Badge variant="verified" label={e.result} />}
+                  </div>
+                ))
+              )}
+            </div>
+            <WorktreePanel />
           </div>
         )}
 

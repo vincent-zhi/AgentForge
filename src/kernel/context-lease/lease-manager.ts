@@ -149,6 +149,16 @@ export class LeaseManager {
     return this.leases.get(leaseId);
   }
 
+  getLeasesForTask(taskId: string): ContextLease[] {
+    const leases: ContextLease[] = [];
+    for (const lease of this.leases.values()) {
+      if (lease.taskId === taskId) {
+        leases.push(lease);
+      }
+    }
+    return leases;
+  }
+
   getViolations(leaseId?: string): Array<{ leaseId: string; action: string; target: string; timestamp: string }> {
     if (leaseId) {
       return this.violations.filter((v) => v.leaseId === leaseId);

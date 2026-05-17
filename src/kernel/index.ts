@@ -16,6 +16,9 @@ import { ProjectOpenWorkflow } from './workflow/project-open-workflow';
 import { TaskCreateWorkflow } from './workflow/task-create-workflow';
 import { TaskExecuteWorkflow } from './workflow/task-execute-workflow';
 import { TaskDeliverWorkflow } from './workflow/task-deliver-workflow';
+import { TaskCapsuleRepository } from '../db/repositories/task-capsule-repo';
+import { generatePacket } from './review-packet/packet-generator';
+import { runSafeApplyChecks } from './safe-apply/apply-gate';
 
 let brainService: BrainService;
 let graphEngine: GraphEngine;
@@ -34,6 +37,10 @@ let projectOpenWorkflow: ProjectOpenWorkflow;
 let taskCreateWorkflow: TaskCreateWorkflow;
 let taskExecuteWorkflow: TaskExecuteWorkflow;
 let taskDeliverWorkflow: TaskDeliverWorkflow;
+let taskCapsuleRepo: TaskCapsuleRepository;
+
+const packetGenerator = { generatePacket };
+const applyGate = { runSafeApplyChecks };
 
 export function initializeKernel(): void {
   const db = getDatabase();
@@ -51,6 +58,7 @@ export function initializeKernel(): void {
   gitManager = new GitManager();
   testRunner = new TestRunner();
   auditLogger = new AuditLogger();
+  taskCapsuleRepo = new TaskCapsuleRepository();
 
   capsuleCompiler.setGuardEngine(guardEngine);
   capsuleCompiler.setBrainService(brainService);
@@ -66,6 +74,29 @@ export function initializeKernel(): void {
 export function shutdownKernel(): void {
   closeDatabase();
 }
+
+export const kernelServices = {
+  get brainService() { return brainService; },
+  get graphEngine() { return graphEngine; },
+  get guardEngine() { return guardEngine; },
+  get leaseManager() { return leaseManager; },
+  get agentRuntime() { return agentRuntime; },
+  get evidencePipeline() { return evidencePipeline; },
+  get capsuleCompiler() { return capsuleCompiler; },
+  get factGovernor() { return factGovernor; },
+  get modelGateway() { return modelGateway; },
+  get terminalManager() { return terminalManager; },
+  get gitManager() { return gitManager; },
+  get testRunner() { return testRunner; },
+  get auditLogger() { return auditLogger; },
+  get projectOpenWorkflow() { return projectOpenWorkflow; },
+  get taskCreateWorkflow() { return taskCreateWorkflow; },
+  get taskExecuteWorkflow() { return taskExecuteWorkflow; },
+  get taskDeliverWorkflow() { return taskDeliverWorkflow; },
+  get taskCapsuleRepo() { return taskCapsuleRepo; },
+  packetGenerator,
+  applyGate,
+};
 
 export {
   brainService,
@@ -85,6 +116,9 @@ export {
   taskCreateWorkflow,
   taskExecuteWorkflow,
   taskDeliverWorkflow,
+  taskCapsuleRepo,
+  packetGenerator,
+  applyGate,
 };
 
 export { BrainService } from './project-brain/brain-service';

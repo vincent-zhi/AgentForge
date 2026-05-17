@@ -2,6 +2,7 @@ export const IPC_CHANNELS = {
   PROJECT: {
     OPEN: 'project:open',
     SCAN: 'project:scan',
+    CLOSE: 'project:close',
     GET_FACTS: 'project:getFacts',
     SEARCH_FACTS: 'project:searchFacts',
     GET_MODULES: 'project:getModules',
@@ -38,10 +39,23 @@ export const IPC_CHANNELS = {
     STATUS: 'git:status',
     DIFF: 'git:diff',
     COMMIT: 'git:commit',
+    LIST_WORKTREES: 'git:listWorktrees',
+    CREATE_WORKTREE: 'git:createWorktree',
+    REMOVE_WORKTREE: 'git:removeWorktree',
   },
   RUNTIME: {
     EXECUTE_COMMAND: 'runtime:executeCommand',
     RUN_TESTS: 'runtime:runTests',
+  },
+  FILE: {
+    READ: 'file:read',
+    WRITE: 'file:write',
+  },
+  SETTINGS: {
+    GET: 'settings:get',
+    SET: 'settings:set',
+    GET_ALL: 'settings:getAll',
+    DELETE: 'settings:delete',
   },
 } as const;
 

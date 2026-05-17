@@ -15,7 +15,7 @@ function invoke(channel: string, args: Record<string, unknown>): Promise<unknown
 
 export const bridge = {
   project: {
-    open: (path: string) => invoke(channels.PROJECT.OPEN, { path }),
+    open: (path?: string) => invoke(channels.PROJECT.OPEN, { path }),
     scan: (projectPath: string) => invoke(channels.PROJECT.SCAN, { projectPath }),
     getFacts: (filters?: { module?: string; type?: string; confidence?: string }) => invoke(channels.PROJECT.GET_FACTS, { filters }),
     searchFacts: (query: string) => invoke(channels.PROJECT.SEARCH_FACTS, { query }),
@@ -53,6 +53,19 @@ export const bridge = {
     status: (projectPath: string) => invoke(channels.GIT.STATUS, { projectPath }),
     diff: (projectPath: string) => invoke(channels.GIT.DIFF, { projectPath }),
     commit: (projectPath: string, message: string) => invoke(channels.GIT.COMMIT, { projectPath, message }),
+    listWorktrees: (projectPath: string) => invoke(channels.GIT.LIST_WORKTREES, { projectPath }),
+    createWorktree: (projectPath: string, branchName: string, worktreePath: string) => invoke(channels.GIT.CREATE_WORKTREE, { projectPath, branchName, worktreePath }),
+    removeWorktree: (projectPath: string, worktreePath: string) => invoke(channels.GIT.REMOVE_WORKTREE, { projectPath, worktreePath }),
+  },
+  file: {
+    read: (filePath: string) => invoke(channels.FILE.READ, { filePath }) as Promise<string>,
+    write: (filePath: string, content: string) => invoke(channels.FILE.WRITE, { filePath, content }),
+  },
+  settings: {
+    get: (key: string) => invoke(channels.SETTINGS.GET, { key }) as Promise<string | null>,
+    set: (key: string, value: string) => invoke(channels.SETTINGS.SET, { key, value }),
+    getAll: () => invoke(channels.SETTINGS.GET_ALL, {}) as Promise<Record<string, string>>,
+    delete: (key: string) => invoke(channels.SETTINGS.DELETE, { key }),
   },
   runtime: {
     executeCommand: (command: string, cwd?: string) => invoke(channels.RUNTIME.EXECUTE_COMMAND, { command, cwd }),

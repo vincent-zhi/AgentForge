@@ -13,6 +13,12 @@ interface GitLogEntry {
   date: string;
 }
 
+interface WorktreeInfo {
+  path: string;
+  branch: string;
+  isCurrent: boolean;
+}
+
 export class GitManager {
   private gitInstances: Map<string, SimpleGit> = new Map();
 
@@ -79,5 +85,34 @@ export class GitManager {
       message: entry.message,
       date: entry.date,
     }));
+  }
+
+  async listWorktrees(projectPath: string): Promise<WorktreeInfo[]> {
+    const git = this.getGit(projectPath);
+    const output = await git.raw(['worktree', 'list', '--porcelain']);
+    const worktrees: WorktreeInfo[] = [];
+    let currentPath = '';
+    let currentBranch = '';
+    let isCurrent = false;
+
+    for (const line of output.split('\n')) {
+      if (line.startsWith('worktree ')) {
+        if (currentPath) {
+          worktrees.push({ path: currentPath, branch: currentBranch, isCurrent });
+        }
+        currentPath = line.substring('worktree '.length);
+        isCurrent = false;
+      } else if (line.startsWith('branch ')) {
+        currentBranch = line.substring('branch '.length).replace('refs/heads/', '');
+      } else if (line === 'bare') {
+        isCurrent = true;
+      }
+    }
+
+    if (currentPath) {
+      worktrees.push({ path: currentPath, branch: currentBranch, isCurrent });
+    }
+
+    return worktrees;
   }
 }
